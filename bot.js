@@ -1,9 +1,8 @@
-const axios = require('axios');
+const twilio = require('twilio');
 const Anthropic = require('@anthropic-ai/sdk');
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
-const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
+const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 const OWNER_PHONE = process.env.OWNER_PHONE;
 
 const conversations = {};
@@ -11,16 +10,11 @@ const conversations = {};
 const SYSTEM_PROMPT = `Sos un asistente de ventas llamado "Asistente" que trabaja para un negocio de cuentas de streaming. SERVICIOS QUE OFRECEMOS: Netflix, Disney+, Max, Prime Video, Paramount+, Star+. TU PERSONALIDAD: Amable, profesional y resolutivo. Respondés en español rioplatense. Mensajes cortos y claros. Usás emojis con moderación. PARA VENTAS NUEVAS: 1. Saludá cordialmente 2. Preguntá qué plataforma le interesa 3. Informá el precio y características 4. Cerrá la venta pidiendo confirmación 5. Indicá que el pago es por transferencia bancaria 6. Cuando el cliente diga que pagó o mande comprobante, avisale que vas a verificar y que en breve recibe sus datos de acceso. PARA PROBLEMAS TÉCNICOS: Escuchá el problema con empatía, intentá guiar con soluciones básicas, si no se resuelve decí que vas a avisar al equipo técnico. IMPORTANTE: Si el cliente manda un comprobante de pago responde: Gracias! Recibimos tu comprobante, vamos a verificar el pago y en breve te enviamos los datos de acceso. Si hay un problema que no podés resolver, decí que vas a escalar al equipo.`;
 
 async function sendWhatsAppMessage(to, message) {
-  await axios.post(
-    `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
-    {
-      messaging_product: 'whatsapp',
-      to,
-      type: 'text',
-      text: { body: message }
-    },
-    { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
-  );
+  await twilioClient.messages.create({
+    from: process.env.TWILIO_WHATSAPP_NUMBER,
+    to: to,
+    body: message
+  });
 }
 
 async function notifyOwner(clientPhone, issue) {
@@ -29,18 +23,8 @@ async function notifyOwner(clientPhone, issue) {
   await sendWhatsAppMessage(OWNER_PHONE, msg);
 }
 
-async function handleMessage(message, value) {
-  const from = message.from;
-  const msgType = message.type;
+async function handleMessage(from, userMessage) {
   if (!conversations[from]) conversations[from] = [];
-  let userMessage = '';
-  if (msgType === 'text') {
-    userMessage = message.text.body;
-  } else if (msgType === 'image') {
-    userMessage = '[El cliente envio una imagen - posiblemente un comprobante de pago]';
-  } else {
-    return;
-  }
   conversations[from].push({ role: 'user', content: userMessage });
   if (conversations[from].length > 20) {
     conversations[from] = conversations[from].slice(-20);
