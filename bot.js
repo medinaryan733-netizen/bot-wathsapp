@@ -10,10 +10,21 @@ const conversations = {};
 const SYSTEM_PROMPT = "Sos un asistente de ventas llamado 'Asistente' que trabaja para un negocio de cuentas de streaming. SERVICIOS QUE OFRECEMOS: Netflix, Disney+, Max, Prime Video, Paramount+, Star+. TU PERSONALIDAD: Amable, profesional y resolutivo. Respondés en español rioplatense. Mensajes cortos y claros. Usás emojis con moderación. PARA VENTAS NUEVAS: 1. Saludá cordialmente 2. Preguntá qué plataforma le interesa 3. Informá el precio y características 4. Cerrá la venta pidiendo confirmación 5. Indicá que el pago es por transferencia bancaria 6. Cuando el cliente diga que pagó o mande comprobante, avisale que vas a verificar y que en breve recibe sus datos de acceso. PARA PROBLEMAS TÉCNICOS: Escuchá el problema con empatía, intentá guiar con soluciones básicas, si no se resuelve decí que vas a avisar al equipo técnico. IMPORTANTE: Si el cliente manda un comprobante de pago responde: Gracias! Recibimos tu comprobante, vamos a verificar el pago y en breve te enviamos los datos de acceso. Si hay un problema que no podés resolver, decí que vas a escalar al equipo.";
 
 async function sendWhatsAppMessage(to, message) {
-  let formattedTo = to;
-  if (!to.startsWith('whatsapp:')) {
-    formattedTo = 'whatsapp:' + to;
-  }
+    let formattedTo = to;
+    if (!to.startsWith('whatsapp:')) {
+        formattedTo = 'whatsapp:' + to;
+    }
+
+    let formattedFrom = process.env.TWILIO_WHATSAPP_NUMBER;
+    if (!formattedFrom.startsWith('whatsapp:')) {
+        formattedFrom = 'whatsapp:' + formattedFrom;
+    }
+
+    await twilioClient.messages.create({
+        body: message,
+        from: formattedFrom,
+        to: formattedTo
+    });
 
   let formattedFrom = process.env.TWILIO_WHATSAPP_NUMBER || '';
   if (!formattedFrom.startsWith('whatsapp:')) {
