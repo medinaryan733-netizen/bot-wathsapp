@@ -13,14 +13,17 @@ app.post('/webhook', async (req, res) => {
 
         console.log('Mensaje recibido:', from, userMessage);
 
-        if (from && userMessage) {
-            await handleMessage(from, userMessage);
-        }
-
+        // 1. Le avisamos de inmediato a Twilio que recibimos la carta (Evita el Error 11200)
         res.sendStatus(200);
+
+        // 2. Trabajamos en la respuesta en segundo plano sin hacer esperar a Twilio
+        if (from && userMessage) {
+            handleMessage(from, userMessage).catch(err => {
+                console.error('Error dentro de handleMessage:', err);
+            });
+        }
     } catch (err) {
         console.error('Error procesando mensaje:', err);
-        res.sendStatus(500);
     }
 });
 
@@ -31,5 +34,5 @@ app.get('/', (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-   console.log("Bot corriendo en puerto" + PORT);
+    console.log(Bot corriendo en puerto ${PORT});
 });
