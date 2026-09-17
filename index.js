@@ -13,10 +13,10 @@ app.post('/webhook', async (req, res) => {
 
         console.log('Mensaje recibido:', from, userMessage);
 
-        // 1. Le avisamos de inmediato a Twilio que recibimos la carta (Evita el Error 11200)
+        // 1. Le avisamos de inmediato a Twilio que recibimos el mensaje (evita timeout 11200)
         res.sendStatus(200);
 
-        // 2. Trabajamos en la respuesta en segundo plano sin hacer esperar a Twilio
+        // 2. Procesamos la respuesta en segundo plano
         if (from && userMessage) {
             handleMessage(from, userMessage).catch(err => {
                 console.error('Error dentro de handleMessage:', err);
