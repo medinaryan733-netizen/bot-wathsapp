@@ -14,7 +14,7 @@ app.post('/webhook', function(req, res) {
         console.log('Mensaje recibido:', from, userMessage);
 
         // Responde 200 a Twilio de inmediato para evitar el error de tiempo (11200)
-        res.sendStatus(200);
+        res.status(200).send('');
 
         if (from && userMessage) {
             handleMessage(from, userMessage);
