@@ -27,25 +27,26 @@ app.post('/webhook', function(req, res) {
     var entry = body.entry && body.entry[0];
     var changes = entry && entry.changes && entry.changes[0];
     var message = changes && changes.value && changes.value.messages && changes.value.messages[0];
-    if (message && message.type === 'text') {
+    if (message) {
       var from = message.from;
-      var text = message.text.body;
-      console.log('Mensaje de texto de:', from, 'Texto:', text);
-      handleMessage(from, text).catch(function(err) {
-        console.error('Error handleMessage:', err.message);
-      });
-    } else if (message && message.type === 'image') {
-      var from = message.from;
-      console.log('Imagen recibida de:', from);
-      handleMessage(from, '[El cliente envio una imagen - posiblemente un comprobante de pago]').catch(function(err) {
-        console.error('Error handleMessage imagen:', err.message);
-      });
-    } else if (message && message.type === 'audio') {
-      var from = message.from;
-      console.log('Audio recibido de:', from);
-      handleMessage(from, '[El cliente envio un audio - pedile que escriba su consulta]').catch(function(err) {
-        console.error('Error handleMessage audio:', err.message);
-      });
+      var messageType = message.type;
+      if (messageType === 'text') {
+        var text = message.text.body;
+        console.log('Texto de:', from, ':', text);
+        handleMessage(from, text, 'text').catch(function(err) {
+          console.error('Error:', err.message);
+        });
+      } else if (messageType === 'image') {
+        console.log('Imagen de:', from);
+        handleMessage(from, '[imagen]', 'image').catch(function(err) {
+          console.error('Error:', err.message);
+        });
+      } else if (messageType === 'audio') {
+        console.log('Audio de:', from);
+        handleMessage(from, '[audio]', 'audio').catch(function(err) {
+          console.error('Error:', err.message);
+        });
+      }
     }
   }
   res.sendStatus(200);
