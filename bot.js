@@ -59,6 +59,21 @@ function notifyOwner(clientPhone, issue) {
                      "¡Guarda este mensaje para tenerlo siempre presente!";
     return sendWhatsAppMessage(from, ayudaTexto);
   }
+  // Comando para responder a un cliente: !resp [numero] [mensaje]
+  if (userMessage.toLowerCase().startsWith('!resp ')) {
+    var partes = userMessage.split(' ');
+    var clienteTelefono = partes[1];
+    var mensajeRespuesta = partes.slice(2).join(' ');
+    
+    if (clienteTelefono && mensajeRespuesta) {
+      // Envía el mensaje oficial al cliente
+      await sendWhatsAppMessage(clienteTelefono, mensajeRespuesta);
+      // Te confirma a ti que se envió con éxito
+      return sendWhatsAppMessage(from, "✅ Respuesta enviada con éxito al cliente " + clienteTelefono);
+    } else {
+      return sendWhatsAppMessage(from, "❌ Formato incorrecto. Usa: !resp [número] [tu mensaje]");
+    }
+  }
   var msg = 'ALERTA NEXXUS\n\nCliente: ' + clientPhone + '\nProblema: ' + issue + '\n\nRyan, por favor revisa y contacta al cliente.';
   return sendWhatsAppMessage(OWNER_PHONE, msg);
 }
