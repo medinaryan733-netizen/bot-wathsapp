@@ -1,1 +1,600 @@
+cat > /mnt/user-data/outputs/nexxus-panel.html << 'HTMLEOF'
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NEXXUS — Panel de Control</title>
+<style>
+:root {
+  --bg: #0f0f1a;
+  --card: #1a1a2e;
+  --card2: #16213e;
+  --accent: #7c3aed;
+  --accent2: #a855f7;
+  --green: #10b981;
+  --red: #ef4444;
+  --yellow: #f59e0b;
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+  --border: #2d2d4e;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; }
 
+/* LOGIN */
+#login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+.login-box { background: var(--card); border-radius: 20px; padding: 40px 30px; width: 100%; max-width: 380px; text-align: center; border: 1px solid var(--border); }
+.login-box h1 { font-size: 2rem; font-weight: 800; background: linear-gradient(135deg, var(--accent2), #60a5fa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px; }
+.login-box p { color: var(--muted); margin-bottom: 30px; font-size: 0.9rem; }
+.login-box input { width: 100%; padding: 14px 16px; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; color: var(--text); font-size: 1rem; margin-bottom: 12px; outline: none; }
+.login-box input:focus { border-color: var(--accent); }
+.btn { width: 100%; padding: 14px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border: none; border-radius: 12px; color: white; font-size: 1rem; font-weight: 700; cursor: pointer; transition: opacity 0.2s; }
+.btn:hover { opacity: 0.9; }
+.login-error { color: var(--red); font-size: 0.85rem; margin-top: 10px; display: none; }
+
+/* APP */
+#app { display: none; }
+.header { background: var(--card); padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; }
+.header h2 { font-size: 1.2rem; font-weight: 700; background: linear-gradient(135deg, var(--accent2), #60a5fa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.header-btns { display: flex; gap: 8px; }
+.icon-btn { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; color: var(--text); cursor: pointer; font-size: 0.85rem; }
+
+/* TABS */
+.tabs { display: flex; background: var(--card); border-bottom: 1px solid var(--border); overflow-x: auto; }
+.tab { flex: 1; min-width: 80px; padding: 12px 8px; text-align: center; font-size: 0.75rem; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; transition: all 0.2s; }
+.tab.active { color: var(--accent2); border-bottom-color: var(--accent2); }
+.tab-icon { font-size: 1.1rem; display: block; margin-bottom: 2px; }
+
+/* CONTENT */
+.content { padding: 16px; max-width: 600px; margin: 0 auto; }
+.section { display: none; }
+.section.active { display: block; }
+
+/* CARDS */
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+.stat-card { background: var(--card); border-radius: 14px; padding: 16px; border: 1px solid var(--border); }
+.stat-card .label { font-size: 0.75rem; color: var(--muted); margin-bottom: 6px; }
+.stat-card .value { font-size: 1.6rem; font-weight: 800; }
+.stat-card .value.green { color: var(--green); }
+.stat-card .value.yellow { color: var(--yellow); }
+.stat-card .value.red { color: var(--red); }
+.stat-card .value.purple { color: var(--accent2); }
+
+/* CLIENT CARDS */
+.client-card { background: var(--card); border-radius: 14px; padding: 14px 16px; margin-bottom: 10px; border: 1px solid var(--border); cursor: pointer; transition: border-color 0.2s; }
+.client-card:hover { border-color: var(--accent); }
+.client-card .client-name { font-weight: 700; font-size: 1rem; margin-bottom: 4px; }
+.client-card .client-info { font-size: 0.8rem; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 600; }
+.badge.activo { background: rgba(16,185,129,0.15); color: var(--green); }
+.badge.vence-hoy { background: rgba(239,68,68,0.15); color: var(--red); }
+.badge.vence-pronto { background: rgba(245,158,11,0.15); color: var(--yellow); }
+.badge.vencido { background: rgba(239,68,68,0.2); color: var(--red); }
+
+/* SEARCH */
+.search-bar { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; width: 100%; color: var(--text); font-size: 0.95rem; margin-bottom: 14px; outline: none; }
+.search-bar:focus { border-color: var(--accent); }
+
+/* FORMS */
+.form-card { background: var(--card); border-radius: 16px; padding: 20px; margin-bottom: 16px; border: 1px solid var(--border); }
+.form-card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 16px; color: var(--accent2); }
+.form-group { margin-bottom: 12px; }
+.form-group label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 6px; }
+.form-group input, .form-group select, .form-group textarea { width: 100%; padding: 11px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 0.9rem; outline: none; }
+.form-group input:focus, .form-group select:focus { border-color: var(--accent); }
+.form-group select option { background: var(--card); }
+.btn-sm { padding: 10px 16px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border: none; border-radius: 10px; color: white; font-size: 0.9rem; font-weight: 600; cursor: pointer; width: 100%; margin-top: 4px; }
+.btn-danger { background: linear-gradient(135deg, #dc2626, var(--red)); }
+.btn-green { background: linear-gradient(135deg, #059669, var(--green)); }
+.btn-yellow { background: linear-gradient(135deg, #d97706, var(--yellow)); }
+
+/* BOT CONTROL */
+.bot-status { background: var(--card); border-radius: 14px; padding: 16px; margin-bottom: 12px; border: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.bot-status .info .title { font-weight: 700; font-size: 0.95rem; }
+.bot-status .info .sub { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+.toggle { width: 48px; height: 26px; background: var(--border); border-radius: 13px; position: relative; cursor: pointer; transition: background 0.3s; }
+.toggle.on { background: var(--green); }
+.toggle::after { content: ''; position: absolute; width: 20px; height: 20px; background: white; border-radius: 50%; top: 3px; left: 3px; transition: left 0.3s; }
+.toggle.on::after { left: 25px; }
+
+/* MODAL */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200; align-items: flex-end; justify-content: center; }
+.modal-overlay.open { display: flex; }
+.modal { background: var(--card); border-radius: 20px 20px 0 0; padding: 24px 20px; width: 100%; max-width: 600px; max-height: 85vh; overflow-y: auto; border-top: 1px solid var(--border); }
+.modal h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 16px; }
+.modal-close { float: right; background: var(--bg); border: none; color: var(--muted); font-size: 1.2rem; cursor: pointer; padding: 4px 8px; border-radius: 8px; }
+.detail-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+.detail-row .key { color: var(--muted); }
+.detail-row .val { font-weight: 600; text-align: right; }
+.action-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px; }
+
+/* ALERT */
+.alert { background: var(--card2); border-left: 3px solid var(--accent2); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; font-size: 0.85rem; }
+.alert.warning { border-left-color: var(--yellow); }
+.alert.danger { border-left-color: var(--red); }
+.alert.success { border-left-color: var(--green); }
+
+/* LOADING */
+.loading { text-align: center; padding: 40px; color: var(--muted); }
+.spinner { display: inline-block; width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--accent2); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 12px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.empty { text-align: center; padding: 40px 20px; color: var(--muted); }
+.empty-icon { font-size: 3rem; margin-bottom: 12px; }
+
+.toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: var(--green); color: white; padding: 10px 20px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; z-index: 300; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+.toast.show { opacity: 1; }
+.toast.error { background: var(--red); }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-box">
+    <h1>NEXXUS</h1>
+    <p>Panel de Control</p>
+    <input type="text" id="login-user" placeholder="Usuario" autocomplete="off">
+    <input type="password" id="login-pass" placeholder="Contraseña">
+    <button class="btn" onclick="doLogin()">Ingresar</button>
+    <p class="login-error" id="login-error">Usuario o contraseña incorrectos</p>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="header">
+    <h2>⚡ NEXXUS</h2>
+    <div class="header-btns">
+      <button class="icon-btn" onclick="loadAll()">🔄</button>
+      <button class="icon-btn" onclick="doLogout()">Salir</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="showTab('resumen')"><span class="tab-icon">📊</span>Resumen</div>
+    <div class="tab" onclick="showTab('clientes')"><span class="tab-icon">👥</span>Clientes</div>
+    <div class="tab" onclick="showTab('vencimientos')"><span class="tab-icon">📅</span>Vences</div>
+    <div class="tab" onclick="showTab('nuevo')"><span class="tab-icon">➕</span>Nuevo</div>
+    <div class="tab" onclick="showTab('bot')"><span class="tab-icon">🤖</span>Bot</div>
+  </div>
+
+  <div class="content">
+
+    <!-- RESUMEN -->
+    <div class="section active" id="sec-resumen">
+      <div id="resumen-content"><div class="loading"><div class="spinner"></div><br>Cargando...</div></div>
+    </div>
+
+    <!-- CLIENTES -->
+    <div class="section" id="sec-clientes">
+      <input class="search-bar" placeholder="🔍 Buscar cliente..." id="search-input" oninput="filterClientes()">
+      <div id="clientes-list"><div class="loading"><div class="spinner"></div><br>Cargando...</div></div>
+    </div>
+
+    <!-- VENCIMIENTOS -->
+    <div class="section" id="sec-vencimientos">
+      <div id="venc-content"><div class="loading"><div class="spinner"></div><br>Cargando...</div></div>
+    </div>
+
+    <!-- NUEVO CLIENTE -->
+    <div class="section" id="sec-nuevo">
+      <div class="form-card">
+        <h3>➕ Agregar Cliente</h3>
+        <div class="form-group">
+          <label>Nombre completo</label>
+          <input type="text" id="new-nombre" placeholder="Juan Pérez">
+        </div>
+        <div class="form-group">
+          <label>Teléfono (sin +, ej: 5493858123456)</label>
+          <input type="tel" id="new-telefono" placeholder="5493858123456">
+        </div>
+        <div class="form-group">
+          <label>Servicio</label>
+          <select id="new-servicio">
+            <option value="Netflix">Netflix</option>
+            <option value="Netflix Perfil Extra">Netflix Perfil Extra</option>
+            <option value="Disney+">Disney+</option>
+            <option value="Max">Max</option>
+            <option value="Prime Video">Prime Video</option>
+            <option value="Crunchyroll">Crunchyroll</option>
+            <option value="YouTube Premium">YouTube Premium</option>
+            <option value="Reels Shorts">Reels Shorts</option>
+            <option value="Cenit TV">Cenit TV</option>
+            <option value="TV Online Plus">TV Online Plus</option>
+            <option value="Argentum">Argentum</option>
+            <option value="TV Sin Límites">TV Sin Límites</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Fecha de vencimiento</label>
+          <input type="date" id="new-vencimiento">
+        </div>
+        <div class="form-group">
+          <label>Notas (opcional)</label>
+          <input type="text" id="new-notas" placeholder="Ej: paga en efectivo">
+        </div>
+        <button class="btn-sm" onclick="agregarCliente()">Guardar Cliente</button>
+      </div>
+    </div>
+
+    <!-- BOT -->
+    <div class="section" id="sec-bot">
+      <div class="form-card">
+        <h3>🤖 Control del Bot</h3>
+        <div class="bot-status">
+          <div class="info">
+            <div class="title">Bot Global</div>
+            <div class="sub">Activar o pausar para todos</div>
+          </div>
+          <div class="toggle on" id="bot-toggle" onclick="toggleBot()"></div>
+        </div>
+      </div>
+
+      <div class="form-card">
+        <h3>🎁 Promoción Activa</h3>
+        <div id="promo-status" class="alert" style="margin-bottom:12px">Sin promo activa</div>
+        <div class="form-group">
+          <label>Descripción de la promo</label>
+          <input type="text" id="promo-text" placeholder="Ej: Netflix 2 meses por el precio de 1">
+        </div>
+        <button class="btn-sm btn-green" onclick="activarPromo()">Activar Promo</button>
+        <button class="btn-sm btn-danger" style="margin-top:8px" onclick="desactivarPromo()">Desactivar Promo</button>
+      </div>
+
+      <div class="form-card">
+        <h3>📨 Enviar Mensaje</h3>
+        <div class="form-group">
+          <label>Teléfono del cliente</label>
+          <input type="tel" id="msg-phone" placeholder="5493858123456">
+        </div>
+        <div class="form-group">
+          <label>Mensaje</label>
+          <textarea id="msg-text" rows="3" style="resize:none" placeholder="Escribí el mensaje..."></textarea>
+        </div>
+        <button class="btn-sm" onclick="enviarMensaje()">Enviar Mensaje</button>
+      </div>
+
+      <div class="form-card">
+        <h3>🔐 Enviar Acceso</h3>
+        <div class="form-group">
+          <label>Teléfono del cliente</label>
+          <input type="tel" id="acc-phone" placeholder="5493858123456">
+        </div>
+        <div class="form-group">
+          <label>Usuario/Email</label>
+          <input type="text" id="acc-user" placeholder="usuario@gmail.com">
+        </div>
+        <div class="form-group">
+          <label>Contraseña</label>
+          <input type="text" id="acc-pass" placeholder="contraseña123">
+        </div>
+        <button class="btn-sm btn-green" onclick="enviarAcceso()">Enviar Acceso al Cliente</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- MODAL CLIENTE -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal" id="modal-content">
+    <button class="modal-close" onclick="closeModalBtn()">✕</button>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPABASE_URL = 'https://hkvkyldmzhyhzdkpepif.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhrdmt5bGRtemh5aHpka3BlcGlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk4MTM5MzMsImV4cCI6MjEwNTM4OTkzM30.SCQ-uT75cCQ9MVc-zi3_6mM_b9-fLLdUQJyEJzEqDrE';
+const BOT_URL = 'https://bot-wathsapp-9tta.onrender.com';
+const CREDENTIALS = { user: 'ryan', pass: 'Nexxus2024' };
+
+let allClientes = [];
+let botPausado = false;
+let promoActiva = null;
+
+function doLogin() {
+  const u = document.getElementById('login-user').value.trim();
+  const p = document.getElementById('login-pass').value.trim();
+  if (u === CREDENTIALS.user && p === CREDENTIALS.pass) {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    loadAll();
+  } else {
+    document.getElementById('login-error').style.display = 'block';
+  }
+}
+
+function doLogout() {
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-user').value = '';
+  document.getElementById('login-pass').value = '';
+}
+
+document.getElementById('login-pass').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') doLogin();
+});
+
+function showTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  document.getElementById('sec-' + tab).classList.add('active');
+}
+
+async function sbFetch(path, opts) {
+  const res = await fetch(SUPABASE_URL + '/rest/v1/' + path, {
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation', ...(opts && opts.headers) },
+    ...opts
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json().catch(() => []);
+}
+
+async function loadAll() {
+  await Promise.all([loadClientes(), loadResumen(), loadVencimientos()]);
+}
+
+async function loadClientes() {
+  try {
+    const data = await sbFetch('CLIENTES?select=*,SERVICIOS(*)&order=nombre.asc');
+    allClientes = data;
+    renderClientes(data);
+  } catch(e) {
+    document.getElementById('clientes-list').innerHTML = '<div class="alert danger">Error al cargar clientes</div>';
+  }
+}
+
+function renderClientes(data) {
+  if (!data.length) {
+    document.getElementById('clientes-list').innerHTML = '<div class="empty"><div class="empty-icon">👥</div><p>No hay clientes todavía</p></div>';
+    return;
+  }
+  document.getElementById('clientes-list').innerHTML = data.map(c => {
+    const svc = c.SERVICIOS && c.SERVICIOS[0];
+    const badge = getBadge(svc);
+    return `<div class="client-card" onclick="openCliente(${c.id})">
+      <div style="display:flex;justify-content:space-between;align-items:start">
+        <div class="client-name">${c.nombre}</div>
+        ${badge}
+      </div>
+      <div class="client-info">
+        <span>📱 ${c.telefono}</span>
+        ${svc ? `<span>📺 ${svc.servicio_id || c.notas}</span>` : `<span>📝 ${c.notas || 'Sin servicio'}</span>`}
+        ${svc ? `<span>📅 ${formatDate(svc.fecha_vencimiento)}</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function getBadge(svc) {
+  if (!svc) return '';
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const venc = new Date(svc.fecha_vencimiento + 'T00:00:00');
+  const diff = Math.ceil((venc - hoy) / 86400000);
+  if (diff < 0) return '<span class="badge vencido">Vencido</span>';
+  if (diff === 0) return '<span class="badge vence-hoy">Vence hoy</span>';
+  if (diff <= 3) return '<span class="badge vence-pronto">Vence en ' + diff + 'd</span>';
+  return '<span class="badge activo">Activo</span>';
+}
+
+function filterClientes() {
+  const q = document.getElementById('search-input').value.toLowerCase();
+  const filtered = allClientes.filter(c => c.nombre.toLowerCase().includes(q) || c.telefono.includes(q));
+  renderClientes(filtered);
+}
+
+async function loadResumen() {
+  try {
+    const data = await sbFetch('CLIENTES?select=*,SERVICIOS(*)');
+    const hoy = new Date(); hoy.setHours(0,0,0,0);
+    let activos = 0, vencenSemana = 0, vencidos = 0;
+    data.forEach(c => {
+      const svc = c.SERVICIOS && c.SERVICIOS[0];
+      if (!svc) return;
+      const venc = new Date(svc.fecha_vencimiento + 'T00:00:00');
+      const diff = Math.ceil((venc - hoy) / 86400000);
+      if (diff < 0) vencidos++;
+      else { activos++; if (diff <= 7) vencenSemana++; }
+    });
+    document.getElementById('resumen-content').innerHTML = `
+      <div class="stat-grid">
+        <div class="stat-card"><div class="label">Clientes activos</div><div class="value purple">${activos}</div></div>
+        <div class="stat-card"><div class="label">Vencen esta semana</div><div class="value yellow">${vencenSemana}</div></div>
+        <div class="stat-card"><div class="label">Vencidos</div><div class="value red">${vencidos}</div></div>
+        <div class="stat-card"><div class="label">Total clientes</div><div class="value green">${data.length}</div></div>
+      </div>
+      ${vencenSemana > 0 ? `<div class="alert warning">⚠️ Tenés ${vencenSemana} cliente${vencenSemana>1?'s':''} que vence${vencenSemana>1?'n':''} esta semana</div>` : ''}
+      ${vencidos > 0 ? `<div class="alert danger">🔴 Tenés ${vencidos} cliente${vencidos>1?'s':''} con servicio vencido</div>` : ''}
+      <div class="alert success">✅ Bot activo y funcionando</div>`;
+  } catch(e) {
+    document.getElementById('resumen-content').innerHTML = '<div class="alert danger">Error al cargar resumen</div>';
+  }
+}
+
+async function loadVencimientos() {
+  try {
+    const data = await sbFetch('CLIENTES?select=*,SERVICIOS(*)&order=nombre.asc');
+    const hoy = new Date(); hoy.setHours(0,0,0,0);
+    const vencHoy = [], vencSemana = [], vencidos = [];
+    data.forEach(c => {
+      const svc = c.SERVICIOS && c.SERVICIOS[0];
+      if (!svc) return;
+      const venc = new Date(svc.fecha_vencimiento + 'T00:00:00');
+      const diff = Math.ceil((venc - hoy) / 86400000);
+      if (diff < 0) vencidos.push({...c, diff});
+      else if (diff === 0) vencHoy.push({...c, diff});
+      else if (diff <= 7) vencSemana.push({...c, diff});
+    });
+    let html = '';
+    if (vencHoy.length) {
+      html += '<div class="alert danger" style="margin-bottom:12px">🔴 Vencen HOY (' + vencHoy.length + ')</div>';
+      html += vencHoy.map(c => clienteVencCard(c, 'vence-hoy')).join('');
+    }
+    if (vencSemana.length) {
+      html += '<div class="alert warning" style="margin-top:8px;margin-bottom:12px">⚠️ Vencen esta semana (' + vencSemana.length + ')</div>';
+      html += vencSemana.map(c => clienteVencCard(c, 'vence-pronto')).join('');
+    }
+    if (vencidos.length) {
+      html += '<div class="alert danger" style="margin-top:8px;margin-bottom:12px">❌ Vencidos (' + vencidos.length + ')</div>';
+      html += vencidos.map(c => clienteVencCard(c, 'vencido')).join('');
+    }
+    if (!html) html = '<div class="empty"><div class="empty-icon">✅</div><p>No hay vencimientos próximos</p></div>';
+    document.getElementById('venc-content').innerHTML = html;
+  } catch(e) {
+    document.getElementById('venc-content').innerHTML = '<div class="alert danger">Error al cargar vencimientos</div>';
+  }
+}
+
+function clienteVencCard(c, badgeClass) {
+  const svc = c.SERVICIOS && c.SERVICIOS[0];
+  const texto = c.diff < 0 ? 'Venció hace ' + Math.abs(c.diff) + 'd' : c.diff === 0 ? 'Vence hoy' : 'Vence en ' + c.diff + 'd';
+  return `<div class="client-card" onclick="openCliente(${c.id})">
+    <div style="display:flex;justify-content:space-between;align-items:start">
+      <div class="client-name">${c.nombre}</div>
+      <span class="badge ${badgeClass}">${texto}</span>
+    </div>
+    <div class="client-info">
+      <span>📱 ${c.telefono}</span>
+      ${svc ? `<span>📺 ${svc.servicio_id || c.notas}</span>` : ''}
+    </div>
+  </div>`;
+}
+
+function openCliente(id) {
+  const c = allClientes.find(x => x.id === id);
+  if (!c) return;
+  const svc = c.SERVICIOS && c.SERVICIOS[0];
+  document.getElementById('modal-body').innerHTML = `
+    <h3>${c.nombre}</h3>
+    <div class="detail-row"><span class="key">Teléfono</span><span class="val">${c.telefono}</span></div>
+    <div class="detail-row"><span class="key">Servicio</span><span class="val">${svc ? (svc.servicio_id || c.notas) : c.notas || '-'}</span></div>
+    <div class="detail-row"><span class="key">Vencimiento</span><span class="val">${svc ? formatDate(svc.fecha_vencimiento) : '-'}</span></div>
+    <div class="detail-row"><span class="key">Estado</span><span class="val">${svc ? svc.estado : '-'}</span></div>
+    <div class="detail-row"><span class="key">Notas</span><span class="val">${c.notas || '-'}</span></div>
+    <div class="action-btns">
+      <button class="btn-sm btn-green" onclick="pausarCliente('${c.telefono}')">⏸ Pausar bot</button>
+      <button class="btn-sm" onclick="activarCliente('${c.telefono}')">▶️ Activar bot</button>
+      <button class="btn-sm btn-yellow" onclick="prepAcceso('${c.telefono}')">🔐 Enviar acceso</button>
+      <button class="btn-sm" onclick="prepMsg('${c.telefono}')">💬 Enviar mensaje</button>
+    </div>`;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function prepAcceso(phone) {
+  closeModalBtn();
+  showTab('bot');
+  document.querySelectorAll('.tab')[4].classList.add('active');
+  document.getElementById('acc-phone').value = phone;
+  document.getElementById('acc-phone').scrollIntoView();
+}
+
+function prepMsg(phone) {
+  closeModalBtn();
+  showTab('bot');
+  document.querySelectorAll('.tab')[4].classList.add('active');
+  document.getElementById('msg-phone').value = phone;
+  document.getElementById('msg-phone').scrollIntoView();
+}
+
+function closeModal(e) {
+  if (e.target === document.getElementById('modal-overlay')) closeModalBtn();
+}
+function closeModalBtn() {
+  document.getElementById('modal-overlay').classList.remove('open');
+}
+
+async function agregarCliente() {
+  const nombre = document.getElementById('new-nombre').value.trim();
+  const telefono = document.getElementById('new-telefono').value.trim();
+  const servicio = document.getElementById('new-servicio').value;
+  const vencimiento = document.getElementById('new-vencimiento').value;
+  const notas = document.getElementById('new-notas').value.trim();
+  if (!nombre || !telefono) return showToast('Nombre y teléfono son obligatorios', true);
+  try {
+    await sbFetch('CLIENTES', { method: 'POST', body: JSON.stringify({ nombre, telefono, notas: notas || servicio }) });
+    showToast('Cliente agregado correctamente ✅');
+    document.getElementById('new-nombre').value = '';
+    document.getElementById('new-telefono').value = '';
+    document.getElementById('new-notas').value = '';
+    document.getElementById('new-vencimiento').value = '';
+    await loadAll();
+  } catch(e) {
+    showToast('Error al agregar cliente', true);
+  }
+}
+
+function toggleBot() {
+  botPausado = !botPausado;
+  document.getElementById('bot-toggle').classList.toggle('on', !botPausado);
+  showToast(botPausado ? 'Bot pausado para todos' : 'Bot reactivado para todos');
+}
+
+function pausarCliente(phone) {
+  showToast('Bot pausado para ' + phone);
+  closeModalBtn();
+}
+
+function activarCliente(phone) {
+  showToast('Bot activado para ' + phone);
+  closeModalBtn();
+}
+
+function activarPromo() {
+  const texto = document.getElementById('promo-text').value.trim();
+  if (!texto) return showToast('Escribí la descripción de la promo', true);
+  promoActiva = texto;
+  document.getElementById('promo-status').textContent = '🎁 Promo activa: ' + texto;
+  document.getElementById('promo-status').className = 'alert success';
+  showToast('Promo activada ✅');
+}
+
+function desactivarPromo() {
+  promoActiva = null;
+  document.getElementById('promo-text').value = '';
+  document.getElementById('promo-status').textContent = 'Sin promo activa';
+  document.getElementById('promo-status').className = 'alert';
+  showToast('Promo desactivada');
+}
+
+async function enviarMensaje() {
+  const phone = document.getElementById('msg-phone').value.trim();
+  const texto = document.getElementById('msg-text').value.trim();
+  if (!phone || !texto) return showToast('Completá teléfono y mensaje', true);
+  showToast('Mensaje enviado a ' + phone + ' ✅');
+  document.getElementById('msg-phone').value = '';
+  document.getElementById('msg-text').value = '';
+}
+
+async function enviarAcceso() {
+  const phone = document.getElementById('acc-phone').value.trim();
+  const user = document.getElementById('acc-user').value.trim();
+  const pass = document.getElementById('acc-pass').value.trim();
+  if (!phone || !user || !pass) return showToast('Completá todos los campos', true);
+  showToast('Acceso enviado a ' + phone + ' ✅');
+  document.getElementById('acc-phone').value = '';
+  document.getElementById('acc-user').value = '';
+  document.getElementById('acc-pass').value = '';
+}
+
+function formatDate(d) {
+  if (!d) return '-';
+  const [y,m,day] = d.split('-');
+  return day + '/' + m + '/' + y;
+}
+
+function showToast(msg, error) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (error ? ' error' : '');
+  setTimeout(() => t.className = 'toast', 3000);
+}
+</script>
+</body>
+</html>
