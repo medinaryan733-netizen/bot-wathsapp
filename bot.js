@@ -240,7 +240,7 @@ async function manejarComandoSorteo(telefonoCliente, textoMensaje) {
   if (texto.includes('chances') || texto.includes('sorteo')) {
     try {
       // Consultamos en Supabase las chances del cliente usando su teléfono
-      const respuesta = await axios.get(${process.env.SUPABASE_URL}/rest/v1/CLIENTES?telefono=eq.${telefonoCliente}, {
+     const respuesta = await axios.get(${process.env.SUPABASE_URL}/rest/v1/CLIENTES?telefono=eq.${telefonoCliente}, {
         headers: {
           'apikey': process.env.SUPABASE_KEY,
           'Authorization': Bearer ${process.env.SUPABASE_KEY}
