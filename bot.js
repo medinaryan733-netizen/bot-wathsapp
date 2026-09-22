@@ -84,6 +84,37 @@ checkVencimientos();
 async function handleOwnerCommand(from, userMessage) {
   var msg = userMessage.trim();
   var msgLower = msg.toLowerCase();
+  var result = await supabase
+      .from('CLIENTES')
+      .select('*, SERVICIOS(*)')
+      .eq('telefono', from)
+      .single();
+
+    var clienteInfo = '';
+    if (result.data) {
+      clienteInfo = ' INFO DEL CLIENTE (úsala con naturalidad, no digas que lo leíste de una base de datos): Nombre: ' + result.data.nombre;
+      if (result.data.SERVICIOS && result.data.SERVICIOS.length > 0) {
+        var svc = result.data.SERVICIOS[0];
+        
+        // Calcular días restantes para el vencimiento de forma exacta
+        var hoy = new Date();
+        hoy.setHours(0,0,0,0);
+        var fechaVenc = new Date(svc.fecha_vencimiento);
+        var diffTime = fechaVenc - hoy;
+        var diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        clienteInfo += ' Servicio: ' + (svc.servicio_id || 'general') + ' Vence: ' + svc.fecha_vencimiento + ' (Faltan ' + diffDays + ' días) Estado: ' + svc.estado;
+
+        // Si vence en un lapso de 0 a 5 días, le indicamos a Claude que lo mencione para aprovechar la ventana abierta
+        if (diffDays <= 5 && diffDays >= 0 && svc.estado === 'activo') {
+          clienteInfo += ' [ATENCIÓN COMERCIAL: El servicio de este cliente vence en ' + diffDays + ' días. Como nos acaba de escribir y la ventana de WhatsApp está abierta, recuérdale amablemente hacia el final de la charla que puede ir renovando transfiriendo al alias RYAN.MB para evitar cortes].';
+        }
+        // Si vence hoy, mañana o pasado (0 a 2 días), le indicamos a Claude que lo mencione para aprovechar la ventana abierta
+        if (diffDays <= 2 && diffDays >= 0 && svc.estado === 'activo') {
+          clienteInfo += ' [ATENCIÓN COMERCIAL: El servicio de este cliente vence en ' + diffDays + ' días. Como nos acaba de escribir y la ventana de WhatsApp está abierta, recuérdale amablemente hacia el final de la charla que puede ir renovando transfiriendo al alias RYAN.MB para evitar cortes].';
+        }
+      }
+    }
 
   // 1. Comando de ayuda agregado
   if (msgLower === '!ayuda' || msgLower === '!comandos') {
