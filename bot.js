@@ -49,31 +49,8 @@ function sendWhatsAppMessage(to, message) {
   );
 }
 
-async function handleOwnerCommand(from, userMessage) {
+function notifyOwner(clientPhone, issue) {
   if (!OWNER_PHONE) return Promise.resolve();
-  // Comando para recordar las opciones si te olvidas alguna
-  if (userMessage.toLowerCase() === '!ayuda' || userMessage.toLowerCase() === '!comandos') {
-    var ayudaTexto = "🛠️ *Panel de Administrador - Comandos:*\n\n" +
-                     "1️⃣ *!ayuda* o *!comandos*: Muestra esta lista de recordatorio.\n" +
-                     "2️⃣ *Alertas automáticas*: El bot te avisará por este chat si hay algún inconveniente o falta stock.\n\n" +
-                     "¡Guarda este mensaje para tenerlo siempre presente!";
-    return sendWhatsAppMessage(from, ayudaTexto);
-  }
-  // Comando para responder a un cliente: !resp [numero] [mensaje]
-  if (userMessage.toLowerCase().startsWith('!resp ')) {
-    var partes = userMessage.split(' ');
-    var clienteTelefono = partes[1];
-    var mensajeRespuesta = partes.slice(2).join(' ');
-    
-    if (clienteTelefono && mensajeRespuesta) {
-      // Envía el mensaje oficial al cliente
-      await sendWhatsAppMessage(clienteTelefono, mensajeRespuesta);
-      // Te confirma a ti que se envió con éxito
-      return sendWhatsAppMessage(from, "✅ Respuesta enviada con éxito al cliente " + clienteTelefono);
-    } else {
-      return sendWhatsAppMessage(from, "❌ Formato incorrecto. Usa: !resp [número] [tu mensaje]");
-    }
-  }
   var msg = 'ALERTA NEXXUS\n\nCliente: ' + clientPhone + '\nProblema: ' + issue + '\n\nRyan, por favor revisa y contacta al cliente.';
   return sendWhatsAppMessage(OWNER_PHONE, msg);
 }
@@ -91,7 +68,7 @@ function checkVencimientos() {
       if (result.error) return;
       result.data.forEach(function(servicio) {
         if (servicio.CLIENTES && servicio.CLIENTES.telefono) {
-          var msg = 'Hola ' + servicio.CLIENTES.nombre + '! Te recordamos que tu servicio vence mañana. Para renovar transferi al alias RYAN.MB y avisanos. Gracias por elegirnos! - NEXXUS';
+          var msg = 'Hola ' + servicio.CLIENTES.nombre + '! Te recordamos que tu servicio vence manana. Para renovar transferi al alias RYAN.MB y avisanos. Gracias por elegirnos! - NEXXUS';
           sendWhatsAppMessage(servicio.CLIENTES.telefono, msg).catch(function(e) {
             console.error('Error recordatorio:', e.message);
           });
@@ -103,186 +80,199 @@ function checkVencimientos() {
 setInterval(checkVencimientos, 24 * 60 * 60 * 1000);
 checkVencimientos();
 
-function handleOwnerCommand(from, message) {
-  var msg = message.trim();
+// Panel de administración unificado y asíncrono
+async function handleOwnerCommand(from, userMessage) {
+  var msg = userMessage.trim();
+  var msgLower = msg.toLowerCase();
 
+  // 1. Comando de ayuda agregado
+  if (msgLower === '!ayuda' || msgLower === '!comandos') {
+    var ayudaTexto = "🛠️ *Panel de Administrador - Comandos:*\\n\\n" +
+                     "1️⃣ *!ayuda* o *!comandos*: Muestra esta lista.\\n" +
+                     "2️⃣ *!resp [número] [mensaje]*: Responde de forma oficial.\\n" +
+                     "3️⃣ *MSG [número] [mensaje]*: Envía un mensaje directo.\\n" +
+                     "4️⃣ *PAUSA [número]* / *ACTIVAR [número]*: Controla chats.\\n" +
+                     "5️⃣ *PROMO ACTIVA [texto]*: Activa promoción global.";
+    await sendWhatsAppMessage(from, ayudaTexto);
+    return true;
+  }
+
+  // 2. Comando de respuesta rápida al cliente
+  if (msgLower.startsWith('!resp ')) {
+    var partesResp = msg.split(' ');
+    var clienteTelefono = partesResp[1];
+    var mensajeRespuesta = partesResp.slice(2).join(' ');
+    
+    if (clienteTelefono && mensajeRespuesta) {
+      await sendWhatsAppMessage(clienteTelefono, mensajeRespuesta);
+      await sendWhatsAppMessage(from, "✅ Respuesta enviada con éxito al cliente " + clienteTelefono);
+      return true;
+    } else {
+      await sendWhatsAppMessage(from, "❌ Formato incorrecto. Usa: !resp [número] [tu mensaje]");
+      return true;
+    }
+  }
+
+  // Comandos originales de Claude integrados
   if (msg === 'PAUSA TODOS') {
     pausedChats['TODOS'] = true;
-    return sendWhatsAppMessage(from, 'Bot pausado para TODOS.');
+    await sendWhatsAppMessage(from, 'Bot pausado para TODOS.');
+    return true;
   }
   if (msg === 'ACTIVAR TODOS') {
     pausedChats['TODOS'] = false;
-    return sendWhatsAppMessage(from, 'Bot reactivado para TODOS.');
+    await sendWhatsAppMessage(from, 'Bot reactivado para TODOS.');
+    return true;
   }
   if (msg.startsWith('PAUSA ')) {
     var phone = msg.replace('PAUSA ', '').trim();
     pausedChats[phone] = true;
-    return sendWhatsAppMessage(from, 'Bot pausado para ' + phone);
+    await sendWhatsAppMessage(from, 'Bot pausado para ' + phone);
+    return true;
   }
   if (msg.startsWith('ACTIVAR ')) {
     var phone = msg.replace('ACTIVAR ', '').trim();
     pausedChats[phone] = false;
-    return sendWhatsAppMessage(from, 'Bot reactivado para ' + phone);
+    await sendWhatsAppMessage(from, 'Bot reactivado para ' + phone);
+    return true;
   }
   if (msg.startsWith('MSG ')) {
     var resto = msg.replace('MSG ', '');
     var espacio = resto.indexOf(' ');
     var clientPhone = resto.substring(0, espacio);
     var clientMsg = resto.substring(espacio + 1);
-    return sendWhatsAppMessage(clientPhone, clientMsg).then(function() {
-      return sendWhatsAppMessage(from, 'Mensaje enviado a ' + clientPhone);
-    });
+    await sendWhatsAppMessage(clientPhone, clientMsg);
+    await sendWhatsAppMessage(from, 'Mensaje enviado a ' + clientPhone);
+    return true;
   }
   if (msg.startsWith('PASS ')) {
     var partes = msg.replace('PASS ', '').split(' ');
     var clientPhone = partes[0];
     var newPass = partes[1];
-    var accessMsg = 'Tus datos actualizados:\n\nContraseña: ' + newPass + '\n\nCualquier consulta estamos a disposicion - NEXXUS';
-    return sendWhatsAppMessage(clientPhone, accessMsg).then(function() {
-      return sendWhatsAppMessage(from, 'Contrasena enviada a ' + clientPhone);
-    });
+    var accessMsg = 'Tus datos actualizados:\n\nContrasena: ' + newPass + '\n\nCualquier consulta estamos a disposicion - NEXXUS';
+    await sendWhatsAppMessage(clientPhone, accessMsg);
+    await sendWhatsAppMessage(from, 'Contrasena enviada a ' + clientPhone);
+    return true;
   }
   if (msg.startsWith('ACCESO ')) {
     var partes = msg.replace('ACCESO ', '').split(' ');
     var clientPhone = partes[0];
     var usuario = partes[1];
     var password = partes[2];
-    var accessMsg = 'Tus datos de acceso:\n\nUsuario: ' + usuario + '\nContraseña: ' + password + '\n\nCualquier consulta estamos a disposicion - NEXXUS';
-    return sendWhatsAppMessage(clientPhone, accessMsg).then(function() {
-      return sendWhatsAppMessage(from, 'Acceso enviado a ' + clientPhone);
-    });
+    var accessMsg = 'Tus datos de acceso:\n\nUsuario: ' + usuario + '\nContrasena: ' + password + '\n\nCualquier consulta estamos a disposicion - NEXXUS';
+    await sendWhatsAppMessage(clientPhone, accessMsg);
+    await sendWhatsAppMessage(from, 'Acceso enviado a ' + clientPhone);
+    return true;
   }
   if (msg.startsWith('NUEVO CLIENTE ')) {
     var partes = msg.replace('NUEVO CLIENTE ', '').split(' ');
     var nombre = partes[0] + ' ' + partes[1];
     var telefono = partes[2];
     var servicio = partes[3];
-    return supabase.from('CLIENTES').insert([{ nombre: nombre, telefono: telefono, notas: servicio }]).then(function() {
-      return sendWhatsAppMessage(from, 'Cliente ' + nombre + ' agregado correctamente.');
-    });
+    await supabase.from('CLIENTES').insert([{ nombre: nombre, telefono: telefono, notas: servicio }]);
+    await sendWhatsAppMessage(from, 'Cliente ' + nombre + ' agregado correctamente.');
+    return true;
   }
   if (msg.startsWith('PROMO ACTIVA ')) {
     promoActiva = msg.replace('PROMO ACTIVA ', '');
-    return sendWhatsAppMessage(from, 'Promo activada: ' + promoActiva);
+    await sendWhatsAppMessage(from, 'Promo activada: ' + promoActiva);
+    return true;
   }
   if (msg === 'PROMO OFF') {
     promoActiva = null;
-    return sendWhatsAppMessage(from, 'Promo desactivada.');
+    await sendWhatsAppMessage(from, 'Promo desactivada.');
+    return true;
   }
   if (msg.startsWith('PROMO ')) {
     var partes = msg.replace('PROMO ', '').split(' ');
     var clientPhone = partes[0];
     var promoMsg = partes.slice(1).join(' ');
     var promoText = 'Tenes suerte! Tenemos una promo especial: ' + promoMsg + ' Para aprovecharla transferi al alias RYAN.MB y avisanos 🎉';
-    return sendWhatsAppMessage(clientPhone, promoText).then(function() {
-      return sendWhatsAppMessage(from, 'Promo enviada a ' + clientPhone);
-    });
+    await sendWhatsAppMessage(clientPhone, promoText);
+    await sendWhatsAppMessage(from, 'Promo enviada a ' + clientPhone);
+    return true;
   }
-  return null;
+
+  return false;
 }
 
 async function handleMessage(from, userMessage, messageType) {
   var ownerPhone = OWNER_PHONE ? OWNER_PHONE.replace('+', '').replace('whatsapp:', '') : '';
   var isOwner = from === ownerPhone || from.includes(ownerPhone);
- // Verificamos si el cliente está consultando sus chances para el sorteo
-  var fueManejadoSorteo = await revisarSorteo(from, userMessage);
-  if (fueManejadoSorteo) {
-    return;
-  }
 
   if (isOwner) {
-    var ownerResult = handleOwnerCommand(from, userMessage);
-    if (ownerResult) return ownerResult;
+    var handled = await handleOwnerCommand(from, userMessage);
+    if (handled) return;
   }
 
   if (pausedChats['TODOS'] || pausedChats[from]) {
-    return Promise.resolve();
+    return;
   }
 
   if (messageType === 'audio') {
-    return sendWhatsAppMessage(from, 'Hola! Para poder ayudarte mejor necesito que escribas tu consulta. Los mensajes de voz no los puedo procesar todavia. Gracias! 😊');
+    await sendWhatsAppMessage(from, 'Hola! Para poder ayudarte mejor necesito que escribas tu consulta. Los mensajes de voz no los puedo procesar todavia. Gracias! 😊');
+    return;
   }
 
   if (messageType === 'image') {
-    notifyOwner(from, 'El cliente envio una imagen - posiblemente un comprobante de pago');
-    return sendWhatsAppMessage(from, 'Recibi tu imagen! En breve Ryan lo verifica y te enviamos los accesos 🎉\n\nMientras tanto, si no sos parte de nuestro grupo de WhatsApp te invitamos a unirte para enterarte de novedades y participar en nuestro sorteo mensual de 8 plataformas:\nhttps://chat.whatsapp.com/B4neyKRVL4a8VmHpa1iGsw');
+    await notifyOwner(from, 'El cliente envio una imagen - posiblemente un comprobante de pago');
+    await sendWhatsAppMessage(from, 'Recibi tu comprobante! En breve Ryan lo verifica y te enviamos los accesos 🎉\n\nMientras tanto, si no sos parte de nuestro grupo de WhatsApp te invitamos a unirte para enterarte de novedades y participar en nuestro sorteo mensual de 8 plataformas:\nhttps://chat.whatsapp.com/B4neyKRVL4a8VmHpa1iGsw');
+    return;
   }
 
   if (!conversations[from]) conversations[from] = [];
 
   var promoInfo = promoActiva ? ' PROMO ACTIVA AHORA: ' + promoActiva + '. Mencionala cuando sea relevante en la conversacion.' : ' No hay promo activa. Si el cliente pregunta por promos avisame para consultar.';
 
-  return supabase
-    .from('CLIENTES')
-    .select('*, SERVICIOS(*)')
-    .eq('telefono', from)
-    .single()
-    .then(function(result) {
-      var clienteInfo = '';
-      if (result.data) {
-        clienteInfo = ' INFO DEL CLIENTE no menciones esto directamente: Nombre: ' + result.data.nombre;
-        if (result.data.SERVICIOS && result.data.SERVICIOS.length > 0) {
-          var svc = result.data.SERVICIOS[0];
-          clienteInfo += ' Servicio: ' + svc.servicio_id + ' Vence: ' + svc.fecha_vencimiento + ' Estado: ' + svc.estado;
-        }
+  try {
+    var result = await supabase
+      .from('CLIENTES')
+      .select('*, SERVICIOS(*)')
+      .eq('telefono', from)
+      .single();
+
+    var clienteInfo = '';
+    if (result.data) {
+      clienteInfo = ' INFO DEL CLIENTE no menciones esto directamente: Nombre: ' + result.data.nombre;
+      if (result.data.SERVICIOS && result.data.SERVICIOS.length > 0) {
+        var svc = result.data.SERVICIOS[0];
+        clienteInfo += ' Servicio: ' + svc.servicio_id + ' Vence: ' + svc.fecha_vencimiento + ' Estado: ' + svc.estado;
       }
-      conversations[from].push({ role: 'user', content: userMessage });
-      if (conversations[from].length > 20) conversations[from] = conversations[from].slice(-20);
-      return client.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 500,
-        system: SYSTEM_PROMPT + promoInfo + clienteInfo,
-        messages: conversations[from]
-      });
-    })
-    .then(function(response) {
-      var botReply = response.content[0].text;
-      conversations[from].push({ role: 'assistant', content: botReply });
-      return sendWhatsAppMessage(from, botReply);
-    })
-    .then(function() {
-      var promoKeywords = ['promo', 'promocion', 'descuento', 'oferta'];
-      var hasPromo = promoKeywords.some(function(k) {
-        return userMessage.toLowerCase().includes(k);
-      });
-      if (hasPromo && !promoActiva) {
-        return notifyOwner(from, 'CONSULTA DE PROMO - Cliente ' + from + ' pregunta por promociones. Respondé: PROMO ' + from + ' [descripcion de la promo]');
-      }
-      var problemKeywords = ['no funciona', 'error', 'problema', 'no puedo', 'no me deja', 'caido', 'no carga', 'contrasena', 'pin', 'hogar', 'ubicacion', 'no anda', 'no me deja ver'];
-      var hasProblem = problemKeywords.some(function(k) {
-        return userMessage.toLowerCase().includes(k);
-      });
-      if (hasProblem) return notifyOwner(from, userMessage);
-    })
-    .catch(function(err) {
-      console.error('Error:', err.message);
+    }
+
+    conversations[from].push({ role: 'user', content: userMessage });
+    if (conversations[from].length > 20) conversations[from] = conversations[from].slice(-20);
+
+    var response = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 500,
+      system: SYSTEM_PROMPT + promoInfo + clienteInfo,
+      messages: conversations[from]
     });
+
+    var botReply = response.content[0].text;
+    conversations[from].push({ role: 'assistant', content: botReply });
+    await sendWhatsAppMessage(from, botReply);
+
+    var promoKeywords = ['promo', 'promocion', 'descuento', 'oferta'];
+    var hasPromo = promoKeywords.some(function(k) {
+      return userMessage.toLowerCase().includes(k);
+    });
+    if (hasPromo && !promoActiva) {
+      await notifyOwner(from, 'CONSULTA DE PROMO - Cliente ' + from + ' pregunta por promociones. Respondé: PROMO ' + from + ' [descripcion de la promo]');
+    }
+
+    var problemKeywords = ['no funciona', 'error', 'problema', 'no puedo', 'no me deja', 'caido', 'no carga', 'contrasena', 'pin', 'hogar', 'ubicacion', 'no anda', 'no me deja ver'];
+    var hasProblem = problemKeywords.some(function(k) {
+      return userMessage.toLowerCase().includes(k);
+    });
+    if (hasProblem) {
+      await notifyOwner(from, userMessage);
+    }
+
+  } catch (err) {
+    console.error('Error:', err.message);
+  }
 }
 
 module.exports = { handleMessage };
-
-async function revisarSorteo(tel, msj){
-  var texto = msj.tolowerCase();
-  if (texto.includes('chaces')|| texto.includes('sorteo')) {
-    try {
-      var urlPeticion=SUPABASE_URL + '/rest/v1/CLIENTES?telefono=eq.' + tel;
-      var respuesta = await axios.get(urlPeticion, {
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': 'Bearer ' + SUPABASE_KEY
-        }
-      });
-      var chancesActuales = 0;
-              if (respuesta.data && respuesta.data.length > 0) {
-                chancesActuales = respuesta.data[0].chances || 0;
-              }
-      var textoRespuesta = "Tienes " + chancesActuales + " chances acumuladas para el sorteo.";
-          await sendWhatsAppMessage(tel, textoRespuesta);
-      return true;
-        } catch (error) {
-      console.error("Error en sorteo:", error);
-      return false;
-    }
-  }
-  return false;
-}
