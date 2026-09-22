@@ -112,6 +112,71 @@ async function handleOwnerCommand(from, userMessage) {
       return true;
     }
   }
+  // Comando para entregar una o varias cuentas automáticas: !dar [telefono] [plataforma1, plataforma2]
+  if (msgLower.startsWith('!dar ')) {
+    var partesDar = msg.split(' ');
+    var clienteTelefono = partesDar[1];
+    var plataformasTexto = partesDar.slice(2).join(' ');
+
+    if (!clienteTelefono || !plataformasTexto) {
+      await sendWhatsAppMessage(from, "❌ Formato incorrecto. Usa: !dar [número] [plataforma1, plataforma2]\nEjemplo: !dar 549385123456 Netflix, Max");
+      return true;
+    }
+
+    // Separar las plataformas por comas
+    var listaPlataformas = plataformasTexto.split(',').map(function(p) { return p.trim(); });
+    var mensajeFinal = "🎉 *¡Tus datos de acceso de NEXXUS!* 🎉\n\n";
+    var entregasExitosas = 0;
+
+    for (var i = 0; i < listaPlataformas.length; i++) {
+      var plat = listaPlataformas[i];
+
+      // Buscar una cuenta disponible en Supabase para esta plataforma
+      var { data: cuentaData, error: cuentaError } = await supabase
+        .from('CUENTAS')
+        .select('*')
+        .ilike('plataforma', '%' + plat + '%')
+        .eq('estado', 'disponible')
+        .limit(1)
+        .single();
+
+      if (cuentaError || !cuentaData) {
+        mensajeFinal += "❌ *Plataforma " + plat + ":* Sin stock disponible actualmente.\n\n";
+        continue;
+      }
+
+      // Agregar datos al mensaje consolidado
+      mensajeFinal += "📺 *Plataforma:* " + cuentaData.plataforma + "\n" +
+                      "📧 *Correo:* " + cuentaData.correo + "\n" +
+                      "🔑 *Contraseña:* " + cuentaData.password;
+      
+      if (cuentaData.perfil) {
+        mensajeFinal += "\n👤 *Perfil:* " + cuentaData.perfil;
+      }
+      if (cuentaData.pin) {
+        mensajeFinal += "\n🔢 *PIN:* " + cuentaData.pin;
+      }
+
+      mensajeFinal += "\n-----------------------------------\n\n";
+
+      // Actualizar el estado de esta cuenta a 'ocupado' en Supabase
+      await supabase
+        .from('CUENTAS')
+        .update({ estado: 'ocupado' })
+        .eq('id', cuentaData.id);
+
+      entregasExitosas++;
+    }
+
+    mensajeFinal += "⚠️ *Importante:* No modifiques los datos de las cuentas para evitar bloqueos. ¡Gracias por elegirnos! - NEXXUS";
+
+    // Enviar el paquete completo al cliente
+    await sendWhatsAppMessage(clienteTelefono, mensajeFinal);
+
+    // Confirmarte a ti el resultado
+    await sendWhatsAppMessage(from, "✅ Paquete enviado con éxito (" + entregasExitosas + " cuentas) al cliente " + clienteTelefono);
+    return true;
+  }
 
   // Comandos originales de Claude integrados
   if (msg === 'PAUSA TODOS') {
