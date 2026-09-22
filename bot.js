@@ -51,6 +51,14 @@ function sendWhatsAppMessage(to, message) {
 
 function notifyOwner(clientPhone, issue) {
   if (!OWNER_PHONE) return Promise.resolve();
+  // Comando para recordar las opciones si te olvidas alguna
+  if (userMessage.toLowerCase() === '!ayuda' || userMessage.toLowerCase() === '!comandos') {
+    var ayudaTexto = "🛠️ *Panel de Administrador - Comandos:*\n\n" +
+                     "1️⃣ *!ayuda* o *!comandos*: Muestra esta lista de recordatorio.\n" +
+                     "2️⃣ *Alertas automáticas*: El bot te avisará por este chat si hay algún inconveniente o falta stock.\n\n" +
+                     "¡Guarda este mensaje para tenerlo siempre presente!";
+    return sendWhatsAppMessage(from, ayudaTexto);
+  }
   var msg = 'ALERTA NEXXUS\n\nCliente: ' + clientPhone + '\nProblema: ' + issue + '\n\nRyan, por favor revisa y contacta al cliente.';
   return sendWhatsAppMessage(OWNER_PHONE, msg);
 }
