@@ -158,9 +158,14 @@ function handleOwnerCommand(from, message) {
   return null;
 }
 
-function handleMessage(from, userMessage, messageType) {
+async function handleMessage(from, userMessage, messageType) {
   var ownerPhone = OWNER_PHONE ? OWNER_PHONE.replace('+', '').replace('whatsapp:', '') : '';
   var isOwner = from === ownerPhone || from.includes(ownerPhone);
+ // Verificamos si el cliente está consultando sus chances para el sorteo
+  var fueManejadoSorteo = await revisarSorteo(from, userMessage);
+  if (fueManejadoSorteo) {
+    return;
+  }
 
   if (isOwner) {
     var ownerResult = handleOwnerCommand(from, userMessage);
