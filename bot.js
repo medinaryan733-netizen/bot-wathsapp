@@ -112,7 +112,7 @@ async function handleOwnerCommand(from, userMessage) {
       return true;
     }
   }
-  // Comando para entregar una o varias cuentas automáticas: !dar [telefono] [plataforma1, plataforma2]
+  // Comando para entregar una o varias cuentas automáticas y guardarlas en Supabase: !dar [telefono] [plataforma1, plataforma2]
   if (msgLower.startsWith('!dar ')) {
     var partesDar = msg.split(' ');
     var clienteTelefono = partesDar[1];
@@ -127,6 +127,7 @@ async function handleOwnerCommand(from, userMessage) {
     var listaPlataformas = plataformasTexto.split(',').map(function(p) { return p.trim(); });
     var mensajeFinal = "🎉 *¡Tus datos de acceso de NEXXUS!* 🎉\n\n";
     var entregasExitosas = 0;
+    var fechaHoy = new Date().toISOString().split('T')[0];
 
     for (var i = 0; i < listaPlataformas.length; i++) {
       var plat = listaPlataformas[i];
@@ -159,10 +160,14 @@ async function handleOwnerCommand(from, userMessage) {
 
       mensajeFinal += "\n-----------------------------------\n\n";
 
-      // Actualizar el estado de esta cuenta a 'ocupado' en Supabase
+      // Actualizar estado, cliente_id y fecha de asignación en Supabase
       await supabase
         .from('CUENTAS')
-        .update({ estado: 'ocupado' })
+        .update({ 
+          estado: 'ocupado', 
+          cliente_id: clienteTelefono,
+          fecha_asignacion: fechaHoy
+        })
         .eq('id', cuentaData.id);
 
       entregasExitosas++;
@@ -174,7 +179,7 @@ async function handleOwnerCommand(from, userMessage) {
     await sendWhatsAppMessage(clienteTelefono, mensajeFinal);
 
     // Confirmarte a ti el resultado
-    await sendWhatsAppMessage(from, "✅ Paquete enviado con éxito (" + entregasExitosas + " cuentas) al cliente " + clienteTelefono);
+    await sendWhatsAppMessage(from, "✅ Paquete enviado y registrado en Supabase (" + entregasExitosas + " cuentas) para el cliente " + clienteTelefono);
     return true;
   }
 
