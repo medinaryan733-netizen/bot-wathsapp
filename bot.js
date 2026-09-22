@@ -235,33 +235,36 @@ module.exports = { handleMessage };
 
 // --- SISTEMA DE CONSULTA DE CHANCES PARA SORTEOS ---
 async function manejarComandoSorteo(telefonoCliente, textoMensaje) {
-  const texto = textoMensaje.toLowerCase();
+  var texto = textoMensaje.toLowerCase();
   
   if (texto.includes('chances') || texto.includes('sorteo')) {
     try {
-      // Consultamos en Supabase las chances del cliente usando su teléfono
-     const respuesta = await axios.get(${process.env.SUPABASE_URL}/rest/v1/CLIENTES?telefono=eq.${telefonoCliente}, {
+      var urlPeticion = SUPABASE_URL + '/rest/v1/CLIENTES?telefono=eq.' + telefonoCliente;
+      
+      var respuesta = await axios.get(urlPeticion, {
         headers: {
-          'apikey': process.env.SUPABASE_KEY,
-          'Authorization': Bearer ${process.env.SUPABASE_KEY}
+          'apikey': SUPABASE_KEY,
+          'Authorization': 'Bearer ' + SUPABASE_KEY
         }
       });
       
-      let chancesActuales = 0;
+      var chancesActuales = 0;
       if (respuesta.data && respuesta.data.length > 0) {
         chancesActuales = respuesta.data[0].chances || 0;
       }
       
-      // Mensaje que le llegará al cliente a su WhatsApp
-      const mensajeFinal = 🎟️ *Sorteo NEXXUS*\n\n¡Hola! Consultando la base de datos, actualmente tienes acumuladas *${chancesActuales} chances* para el próximo sorteo. ¡Muchas gracias por confiar en nosotros y mucha suerte! 🍀;
+      var mensajeFinal = "🎟️ *Sorteo NEXXUS*\n\n¡Hola! Consultando la base de datos, actualmente tienes acumuladas *" + chancesActuales + " chances* para el próximo sorteo. ¡Muchas gracias por confiar en nosotros y mucha suerte! 🍀";
       
-      // Enviamos la respuesta usando la función del bot
       await sendWhatsAppMessage(telefonoCliente, mensajeFinal);
       return true;
     } catch (error) {
       console.error("Error al consultar las chances del cliente:", error);
       return false;
     }
+  }
+  return false;
+}
+
   }
   return false;
 }
