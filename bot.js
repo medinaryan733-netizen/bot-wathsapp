@@ -233,38 +233,28 @@ function handleMessage(from, userMessage, messageType) {
 
 module.exports = { handleMessage };
 
-// --- SISTEMA DE CONSULTA DE CHANCES PARA SORTEOS ---
-async function manejarComandoSorteo(telefonoCliente, textoMensaje) {
-  var texto = textoMensaje.toLowerCase();
-  
-  if (texto.includes('chances') || texto.includes('sorteo')) {
+async function revisarSorteo(tel, msj){
+  var texto = msj.tolowerCase();
+  if (texto.includes('chaces')|| texto.includes('sorteo')) {
     try {
-      var urlPeticion = SUPABASE_URL + '/rest/v1/CLIENTES?telefono=eq.' + telefonoCliente;
-      
+      var urlPeticion=SUPABASE_URL + '/rest/v1/CLIENTES?telefono=eq.' + tel;
       var respuesta = await axios.get(urlPeticion, {
         headers: {
           'apikey': SUPABASE_KEY,
           'Authorization': 'Bearer ' + SUPABASE_KEY
         }
       });
-      
       var chancesActuales = 0;
-      if (respuesta.data && respuesta.data.length > 0) {
-        chancesActuales = respuesta.data[0].chances || 0;
-      }
-      
-      var mensajeFinal = "🎟️ *Sorteo NEXXUS*\n\n¡Hola! Consultando la base de datos, actualmente tienes acumuladas *" + chancesActuales + " chances* para el próximo sorteo. ¡Muchas gracias por confiar en nosotros y mucha suerte! 🍀";
-      
-      await sendWhatsAppMessage(telefonoCliente, mensajeFinal);
+              if (respuesta.data && respuesta.data.length > 0) {
+                chancesActuales = respuesta.data[0].chances || 0;
+              }
+      var textoRespuesta = "Tienes " + chancesActuales + " chances acumuladas para el sorteo.";
+          await sendWhatsAppMessage(tel, textoRespuesta);
       return true;
-    } catch (error) {
-      console.error("Error al consultar las chances del cliente:", error);
+        } catch (error) {
+      console.error("Error en sorteo:", error);
       return false;
     }
-  }
-  return false;
-}
-
   }
   return false;
 }
