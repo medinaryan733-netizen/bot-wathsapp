@@ -49,7 +49,7 @@ function sendWhatsAppMessage(to, message) {
   );
 }
 
-function notifyOwner(clientPhone, issue) {
+async function handleOwnerCommand(from, userMessage) {
   if (!OWNER_PHONE) return Promise.resolve();
   // Comando para recordar las opciones si te olvidas alguna
   if (userMessage.toLowerCase() === '!ayuda' || userMessage.toLowerCase() === '!comandos') {
