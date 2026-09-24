@@ -402,6 +402,48 @@ async function handleMessage(from, userMessage, messageType, rawMessage) {
       }
     }
   }
+  document.getElementById('formAgregarCliente').addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const btn = document.getElementById('btnGuardarCliente');
+  btn.disabled = true;
+  btn.textContent = 'Guardando...';
+
+  const clienteData = {
+    nombre: document.getElementById('cliNombre').value.trim(),
+    telefono: document.getElementById('cliTelefono').value.replace('+', '').trim(),
+    nombre_servicio: document.getElementById('cliPlataforma').value,
+    usuario: document.getElementById('cliUsuario').value.trim(),
+    clave: document.getElementById('cliClave').value.trim(),
+    perfil: document.getElementById('cliPerfil').value.trim(),
+    fecha_vencimiento: document.getElementById('cliVencimiento').value,
+    estado: 'ACTIVO'
+  };
+
+  try {
+    // 1. Guardar o actualizar en la tabla SERVICIOS de Supabase
+    const response = await fetch('/api/servicios/agregar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(clienteData)
+    });
+
+    const result = await response.json();
+
+    if (response.ok && result.success) {
+      alert('✅ ¡Cliente y servicio guardados exitosamente en Supabase!');
+      document.getElementById('formAgregarCliente').reset();
+    } else {
+      alert('❌ Error al guardar: ' + (result.message || 'Error desconocido'));
+    }
+  } catch (error) {
+    console.error('Error enviando formulario:', error);
+    alert('❌ Ocurrió un problema de conexión con el servidor.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '💾 Guardar en Supabase';
+  }
+});
   // =========================================================
   // 1. GUARDAR HISTORIAL EN SUPABASE (Para !historial)
   // =========================================================
