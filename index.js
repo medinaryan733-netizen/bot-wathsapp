@@ -25,29 +25,38 @@ app.post('/webhook', function(req, res) {
   console.log('Mensaje recibido:', JSON.stringify(req.body));
   var body = req.body;
   if (body.object === 'whatsapp_business_account') {
-    var entry = body.entry && body.entry[0];
+  var entry = body.entry && body.entry[0];
     var changes = entry && entry.changes && entry.changes[0];
     var message = changes && changes.value && changes.value.messages && changes.value.messages[0];
+    var contact = changes && changes.value && changes.value.contacts && changes.value.contacts[0];
+
     if (message) {
+      // Guardar el nombre del perfil de WhatsApp si viene en el evento
+      if (contact && contact.profile) {
+        message.pushName = contact.profile.name;
+      }
+
       var from = message.from;
       var messageType = message.type;
+
       if (messageType === 'text') {
         var text = message.text.body;
         console.log('Texto de:', from, ':', text);
-        handleMessage(from, text, 'text').catch(function(err) {
+        handleMessage(from, text, 'text', message).catch(function(err) {
           console.error('Error:', err.message);
         });
       } else if (messageType === 'image') {
         console.log('Imagen de:', from);
-        handleMessage(from, '[imagen]', 'image').catch(function(err) {
+        handleMessage(from, '[imagen]', 'image', message).catch(function(err) {
           console.error('Error:', err.message);
         });
       } else if (messageType === 'audio') {
         console.log('Audio de:', from);
-        handleMessage(from, '[audio]', 'audio').catch(function(err) {
+        handleMessage(from, '[audio]', 'audio', message).catch(function(err) {
           console.error('Error:', err.message);
         });
       }
+    }
     }
   }
   res.sendStatus(200);
