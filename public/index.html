@@ -510,26 +510,60 @@ function closeModalBtn() {
   document.getElementById('modal-overlay').classList.remove('open');
 }
 
-async function agregarCliente() {
-  const nombre = document.getElementById('new-nombre').value.trim();
-  const telefono = document.getElementById('new-telefono').value.trim();
-  const servicio = document.getElementById('new-servicio').value;
-  const vencimiento = document.getElementById('new-vencimiento').value;
-  const notas = document.getElementById('new-notas').value.trim();
-  if (!nombre || !telefono) return showToast('Nombre y teléfono son obligatorios', true);
-  try {
-    await sbFetch('CLIENTES', { method: 'POST', body: JSON.stringify({ nombre, telefono, notas: notas || servicio }) });
-    showToast('Cliente agregado correctamente ✅');
-    document.getElementById('new-nombre').value = '';
-    document.getElementById('new-telefono').value = '';
-    document.getElementById('new-notas').value = '';
-    document.getElementById('new-vencimiento').value = '';
-    await loadAll();
-  } catch(e) {
-    showToast('Error al agregar cliente', true);
-  }
-}
+<form id="formAgregarCliente" class="space-y-4">
+  <h3>➕ Registrar Cliente y Servicio Completo</h3>
 
+  <div class="form-group">
+    <label>👤 Nombre del Cliente:</label>
+    <input type="text" id="cliNombre" placeholder="Ej: Juan Pérez" required class="input-field" />
+  </div>
+
+  <div class="form-group">
+    <label>📞 Teléfono WhatsApp (con código de país):</label>
+    <input type="text" id="cliTelefono" placeholder="Ej: 5493858123456" required class="input-field" />
+  </div>
+
+  <div class="form-group">
+    <label>📺 Plataforma / Servicio:</label>
+    <select id="cliPlataforma" required class="input-field">
+      <option value="Netflix">Netflix</option>
+      <option value="Netflix Perfil Extra">Netflix Perfil Extra</option>
+      <option value="Disney+">Disney+</option>
+      <option value="Max">Max</option>
+      <option value="Prime Video">Prime Video</option>
+      <option value="Crunchyroll">Crunchyroll</option>
+      <option value="YouTube Premium">YouTube Premium</option>
+      <option value="Reels Shorts">Reels Shorts</option>
+      <option value="Cenit TV">Cenit TV</option>
+      <option value="TV Online Plus">TV Online Plus</option>
+      <option value="Argentum">Argentum</option>
+      <option value="TV Sin Límites">TV Sin Límites</option>
+    </select>
+  </div>
+
+  <!-- CAMPOS NUEVOS DE LA CUENTA -->
+  <div class="form-group">
+    <label>📧 Correo / Usuario de la Cuenta:</label>
+    <input type="email" id="cliUsuario" placeholder="ejemplo@correo.com" required class="input-field" />
+  </div>
+
+  <div class="form-group">
+    <label>🔑 Contraseña / Clave:</label>
+    <input type="text" id="cliClave" placeholder="Clave1234" required class="input-field" />
+  </div>
+
+  <div class="form-group">
+    <label>👤 Perfil / PIN (Opcional):</label>
+    <input type="text" id="cliPerfil" placeholder="Ej: Perfil 2 - PIN 1234" class="input-field" />
+  </div>
+
+  <div class="form-group">
+    <label>📅 Fecha de Vencimiento:</label>
+    <input type="date" id="cliVencimiento" required class="input-field" />
+  </div>
+
+  <button type="submit" id="btnGuardarCliente" class="btn-primary">💾 Guardar en Supabase</button>
+</form>
 function toggleBot() {
   botPausado = !botPausado;
   document.getElementById('bot-toggle').classList.toggle('on', !botPausado);
