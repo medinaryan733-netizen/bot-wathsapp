@@ -66,5 +66,33 @@ app.post('/webhook', function(req, res) {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, function() {
+  // Ruta para guardar cliente y servicio completo en Supabase desde el panel web
+app.post('/api/servicios/agregar', async (req, res) => {
+  try {
+    const { nombre, telefono, nombre_servicio, usuario, clave, perfil, fecha_vencimiento, estado } = req.body;
+
+    const { data, error } = await supabase
+      .from('SERVICIOS')
+      .upsert([
+        {
+          telefono,
+          nombre,
+          nombre_servicio,
+          usuario,
+          clave,
+          perfil,
+          fecha_vencimiento,
+          estado: estado || 'ACTIVO'
+        }
+      ], { onConflict: 'telefono' });
+
+    if (error) throw error;
+
+    res.json({ success: true, message: 'Servicio registrado correctamente' });
+  } catch (err) {
+    console.error('Error al guardar en Supabase:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
   console.log('Servidor corriendo en el puerto', PORT);
 });
