@@ -74,6 +74,7 @@ app.post('/webhook', function(req, res) {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, function() {
   // Ruta para guardar cliente y servicio completo en Supabase desde el panel web
+// Ruta para guardar cliente y servicio completo en Supabase
 app.post('/api/servicios/agregar', async (req, res) => {
   try {
     const { nombre, telefono, nombre_servicio, usuario, clave, perfil, fecha_vencimiento, estado } = req.body;
@@ -84,7 +85,7 @@ app.post('/api/servicios/agregar', async (req, res) => {
         {
           telefono,
           nombre,
-          nombre_servicio,
+          servicio_id: nombre_servicio, // Mapeado a la columna real de tu tabla
           usuario,
           clave,
           perfil,
