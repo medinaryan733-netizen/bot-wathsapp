@@ -24,14 +24,15 @@ app.get('/webhook', function(req, res) {
 app.post('/webhook', function(req, res) {
   console.log('Mensaje recibido:', JSON.stringify(req.body));
   var body = req.body;
+
   if (body.object === 'whatsapp_business_account') {
-  var entry = body.entry && body.entry[0];
+    var entry = body.entry && body.entry[0];
     var changes = entry && entry.changes && entry.changes[0];
     var message = changes && changes.value && changes.value.messages && changes.value.messages[0];
     var contact = changes && changes.value && changes.value.contacts && changes.value.contacts[0];
 
     if (message) {
-      // Guardar el nombre del perfil de WhatsApp si viene en el evento
+      // Guarda el nombre de perfil si Meta lo envía
       if (contact && contact.profile) {
         message.pushName = contact.profile.name;
       }
@@ -40,7 +41,7 @@ app.post('/webhook', function(req, res) {
       var messageType = message.type;
 
       if (messageType === 'text') {
-        var text = message.text.body;
+        var text = message.text ? message.text.body : '';
         console.log('Texto de:', from, ':', text);
         handleMessage(from, text, 'text', message).catch(function(err) {
           console.error('Error:', err.message);
@@ -57,12 +58,13 @@ app.post('/webhook', function(req, res) {
         });
       }
     }
-    }
+    res.sendStatus(200);
+  } else {
+    res.sendStatus(404);
   }
-  res.sendStatus(200);
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, function() {
-  console.log('Bot corriendo en puerto ' + PORT);
+  console.log('Servidor corriendo en el puerto', PORT);
 });
