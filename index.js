@@ -73,30 +73,48 @@ app.post('/webhook', function(req, res) {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, function() {
-  // Ruta para guardar cliente y servicio completo en Supabase desde el panel web
-// Ruta para guardar cliente y servicio completo en Supabase
+  // Ruta para registrar Cliente y Servicio completo en Supabase
 app.post('/api/servicios/agregar', async (req, res) => {
   try {
     const { nombre, telefono, nombre_servicio, usuario, clave, perfil, fecha_vencimiento, estado } = req.body;
 
-    const { data, error } = await supabase
+    // 1. Verificar o Crear el Cliente en la tabla CLIENTES
+    let clienteId = null;
+    let { data: clienteExistente } = await supabase
+      .from('CLIENTES')
+      .select('id')
+      .eq('telefono', telefono)
+      .single();
+
+    if (clienteExistente) {
+      clienteId = clienteExistente.id;
+    } else {
+      const { data: nuevoCliente, error: errorCliente } = await supabase
+        .from('CLIENTES')
+        .insert([{ nombre, telefono }])
+        .select('id')
+        .single();
+        
+      if (errorCliente) throw errorCliente;
+      clienteId = nuevoCliente.id;
+    }
+
+    // 2. Guardar las credenciales en la tabla SERVICIOS
+    const { error: errorServicio } = await supabase
       .from('SERVICIOS')
-      .upsert([
-        {
-          telefono,
-          nombre,
-          servicio_id: nombre_servicio, // Mapeado a la columna real de tu tabla
-          usuario,
-          clave,
-          perfil,
-          fecha_vencimiento,
-          estado: estado || 'ACTIVO'
-        }
-      ], { onConflict: 'telefono' });
+      .insert([{
+        cliente_id: clienteId,
+        servicio_id: nombre_servicio, // Netflix, Disney, etc.
+        usuario: usuario,
+        clave: clave,
+        perfil: perfil,
+        fecha_vencimiento: fecha_vencimiento,
+        estado: estado || 'ACTIVO'
+      }]);
 
-    if (error) throw error;
+    if (errorServicio) throw errorServicio;
 
-    res.json({ success: true, message: 'Servicio registrado correctamente' });
+    res.json({ success: true, message: 'Cliente y Servicio registrados correctamente' });
   } catch (err) {
     console.error('Error al guardar en Supabase:', err);
     res.status(500).json({ success: false, message: err.message });
