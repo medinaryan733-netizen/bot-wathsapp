@@ -127,14 +127,6 @@ async function handleOwnerCommand(from, userMessage, rawMessage) {
     await sendWhatsAppMessage(from, ayudaTexto);
     return true;
   }
-      // Confirmación automática al cliente
-      await sendWhatsAppMessage(from, "📲 Recibí tu imagen. Un asesor la revisará a la brevedad.");
-      return true;
-    } catch (errImg) {
-      console.error("Error retransmitiendo la imagen:", errImg.response ? errImg.response.data : errImg.message);
-    }
-  }
-
   // =========================================================
   // 2. COMANDO !HISTORIAL (Para pedir los mensajes de un cliente)
   // =========================================================
