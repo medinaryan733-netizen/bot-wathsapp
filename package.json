@@ -4,7 +4,8 @@
   "description": "Bot de WhatsApp NEXXUS con Gemini AI",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "postinstall": "npx puppeteer browsers install chrome"
   },
   "dependencies": {
     "cors": "^2.8.5",
