@@ -143,6 +143,40 @@ async function handleOwnerCommand(from, userMessage) {
       return true;
     }
   }
+
+  // 2. Comando para registrar clientes y servicios: !agregar telefono | nombre | servicio | fecha_vencimiento
+    if (msgLower.startsWith('!agregar ')) {
+      var partes = msg.replace('!agregar', '').trim().split('|');
+      if (partes.length >= 4) {
+        var tel = partes[0].trim();
+        var nom = partes[1].trim();
+        var serv = partes[2].trim();
+        var fec = partes[3].trim();
+
+        // Asegurar que el cliente exista en la tabla CLIENTES
+        await supabase.from('CLIENTES').upsert({ telefono: tel, nombre: nom }, { onConflict: 'telefono' });
+
+        // Registrar el servicio en la tabla CUENTAS
+        var { error } = await supabase.from('CUENTAS').insert([
+          { 
+            cliente_id: tel, 
+            servicio_id: serv, 
+            fecha_vencimiento: fec, 
+            estado: 'ocupado',
+            notas: 'Cargado por comando'
+          }
+        ]);
+
+        if (error) {
+          await sendWhatsAppMessage(from, '❌ Error al guardar en Supabase: ' + error.message);
+        } else {
+          await sendWhatsAppMessage(from, '✅ ¡Cargado con éxito!\n👤 ' + nom + '\n📱 ' + tel + '\n📦 ' + serv + '\n📅 Vence: ' + fec);
+        }
+      } else {
+        await sendWhatsAppMessage(from, '⚠️ Formato incorrecto. Usa:\n!agregar telefono | nombre | servicio | aaaa-mm-dd');
+      }
+      return;
+    }
   // Comando para entregar una o varias cuentas automáticas y guardarlas en Supabase: !dar [telefono] [plataforma1, plataforma2]
   if (msgLower.startsWith('!dar ')) {
     var partesDar = msg.split(' ');
