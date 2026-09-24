@@ -1,15 +1,18 @@
 {
   "name": "bot-whatsapp",
   "version": "1.0.0",
-  "description": "Bot de WhatsApp NEXXUS con Claude AI",
+  "description": "Bot de WhatsApp NEXXUS con Gemini AI",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
+    "cors": "^2.8.5",
     "express": "^4.18.2",
-    "axios": "^1.6.0",
-    "@anthropic-ai/sdk": "^0.20.0",
-    "@supabase/supabase-js": "^2.39.0"
+    "whatsapp-web.js": "^1.23.0",
+    "@supabase/supabase-js": "^2.39.0",
+    "@google/generative-ai": "^0.1.1",
+    "qrcode-terminal": "^0.12.0",
+    "axios": "^1.6.0"
   }
 }
