@@ -394,7 +394,7 @@ async function handleOwnerCommand(from, userMessage, rawMessage) {
   return false;
 }
 
-async function handleMessage(from, userMessage, messageType) {
+async function handleMessage(from, userMessage, messageType, rawMessage) {
   var ownerPhone = OWNER_PHONE ? OWNER_PHONE.replace('+', '').replace('whatsapp:', '') : '';
   var isOwner = from === ownerPhone || from.includes(ownerPhone);
 
@@ -403,6 +403,46 @@ async function handleMessage(from, userMessage, messageType) {
     if (handled) return;
   }
 
+  // =========================================================
+  // REENVÍO AUTOMÁTICO DE IMÁGENES DE CLIENTES AL DUEÑO
+  // =========================================================
+  if (rawMessage && rawMessage.type === 'image') {
+    const mediaId = rawMessage.image ? rawMessage.image.id : null;
+    const captionCliente = (rawMessage.image && rawMessage.image.caption) || '';
+    const nombreCliente = rawMessage.pushName || 'Sin Nombre';
+
+    if (mediaId) {
+      try {
+        await axios({
+          method: 'POST',
+          url: `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
+          headers: {
+            'Authorization': `Bearer ${WHATSAPP_TOKEN}`,
+            'Content-Type': 'application/json'
+          },
+          data: {
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to: ownerPhone,
+            type: 'image',
+            image: {
+              id: mediaId,
+              caption: `📷 *Nueva imagen recibida*\n👤 *Cliente:* ${nombreCliente}\n📞 *Teléfono:* +${from}${captionCliente ? '\n💬 *Nota:* ' + captionCliente : ''}`
+            }
+          }
+        });
+
+        await sendWhatsAppMessage(from, "📲 Recibí tu imagen. Un asesor la revisará a la brevedad.");
+        return;
+      } catch (errImg) {
+        console.error("Error retransmitiendo la imagen:", errImg.response ? errImg.response.data : errImg.message);
+      }
+    }
+  }
+
+  if (pausedChats['TODOS'] || pausedChats[from]) {
+    return;
+  }
   if (pausedChats['TODOS'] || pausedChats[from]) {
     return;
   }
