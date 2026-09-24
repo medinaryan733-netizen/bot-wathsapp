@@ -81,7 +81,7 @@ setInterval(checkVencimientos, 24 * 60 * 60 * 1000);
 checkVencimientos();
 
 // Panel de administración unificado y asíncrono
-async function handleOwnerCommand(from, userMessage) {
+async function handleOwnerCommand(from, userMessage, rawMessage) {
   var msg = userMessage.trim();
   var msgLower = msg.toLowerCase();
   var result = await supabase
