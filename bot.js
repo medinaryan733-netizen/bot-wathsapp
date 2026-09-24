@@ -402,6 +402,38 @@ async function handleMessage(from, userMessage, messageType, rawMessage) {
       }
     }
   }
+  // =========================================================
+  // 1. GUARDAR HISTORIAL EN SUPABASE (Para !historial)
+  // =========================================================
+  if (!isOwner && userMessage) {
+    supabase.from('messages').insert([
+      { phone: from, role: 'user', content: userMessage }
+    ]).then(({ error }) => {
+      if (error) console.error("Error guardando mensaje en Supabase:", error.message);
+    });
+  }
+
+  // =========================================================
+  // 2. FILTRO INTELIGENTE DE NOTIFICACIONES AL DUEÑO
+  // =========================================================
+  if (!isOwner && userMessage) {
+    const msgLower = userMessage.toLowerCase();
+    
+    // Lista de palabras clave que requieren tu atención inmediata
+    const palabrasCriticas = [
+      'codigo', 'código', 'hogar', 'viaje', 'comprobante', 
+      'pago', 'pagado', 'no puedo', 'error', 'humano', 
+      'asesor', 'ya envié', 'ya envie', 'ya le di', 'clic', 'pantalla'
+    ];
+
+    const esMensajeCritico = palabrasCriticas.some(palabra => msgLower.includes(palabra));
+    const estaEnSoporteHumano = (typeof pausedChats !== 'undefined') && (pausedChats[from] || pausedChats['TODOS']);
+
+    // Envía la alerta a tu WhatsApp personal solo si cumple el filtro
+    if (esMensajeCritico || estaEnSoporteHumano) {
+      sendWhatsAppMessage(ownerPhone, `⚠️ *ALERTA CLIENTE (+${from}):*\n"${userMessage}"`).catch(err => console.error(err));
+    }
+  }
 
   if (pausedChats['TODOS'] || pausedChats[from]) {
     return;
