@@ -127,13 +127,16 @@ async function handleOwnerCommand(from, userMessage) {
     await sendWhatsAppMessage(from, ayudaTexto);
     return true;
   }
-// Reenvío automático de imágenes al administrador
+// =========================================================
+  // 1. REENVÍO AUTOMÁTICO DE IMÁGENES (CON NOMBRE Y TELÉFONO)
+  // =========================================================
   if (typeof rawMessage !== 'undefined' && rawMessage && rawMessage.type === 'image') {
     const mediaId = rawMessage.image.id;
     const captionCliente = rawMessage.image.caption || '';
+    const nombreCliente = rawMessage.contactName || rawMessage.pushName || 'Sin Nombre';
 
     try {
-      // 1. Reenvía la imagen a tu WhatsApp personal
+      // Reenvía la imagen a tu WhatsApp personal con los datos del cliente
       await axios({
         method: 'POST',
         url: `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
@@ -148,16 +151,44 @@ async function handleOwnerCommand(from, userMessage) {
           type: 'image',
           image: {
             id: mediaId,
-            caption: `📷 *Nueva imagen de cliente*\nDe: +${from}${captionCliente ? '\nTexto: ' + captionCliente : ''}`
+            caption: `📷 *Nueva imagen recibida*\n👤 *Cliente:* ${nombreCliente}\n📞 *Teléfono:* +${from}${captionCliente ? '\n💬 *Nota:* ' + captionCliente : ''}`
           }
         }
       });
 
-      // 2. Le avisa al cliente que la foto fue recibida
+      // Confirmación automática al cliente
       await sendWhatsAppMessage(from, "📲 Recibí tu imagen. Un asesor la revisará a la brevedad.");
       return true;
     } catch (errImg) {
       console.error("Error retransmitiendo la imagen:", errImg.response ? errImg.response.data : errImg.message);
+    }
+  }
+
+  // =========================================================
+  // 2. COMANDO !HISTORIAL (Para pedir los mensajes de un cliente)
+  // =========================================================
+  if (msgLower.startsWith('!historial ')) {
+    var numCliente = msg.split(' ')[1];
+    if (numCliente) {
+      try {
+        const { data: logs, error } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('phone', numCliente)
+          .order('created_at', { ascending: false })
+          .limit(10);
+
+        if (error || !logs || logs.length === 0) {
+          await sendWhatsAppMessage(from, "⚠️ No se encontró historial guardado para el número: " + numCliente);
+        } else {
+          var textoHistorial = `📜 *Historial reciente de +${numCliente}:*\n\n` + 
+            logs.reverse().map(m => `• *${m.role || 'Usuario'}:* ${m.content || m.body}`).join('\n');
+          await sendWhatsAppMessage(from, textoHistorial);
+        }
+      } catch (e) {
+        await sendWhatsAppMessage(from, "❌ Error al consultar la base de datos.");
+      }
+      return true;
     }
   }
   // 2. Comando de respuesta rápida al cliente
