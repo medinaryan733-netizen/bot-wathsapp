@@ -1,4 +1,11 @@
 const express = require('express');
+const { createClient } = require('@supabase/supabase-js');
+
+// Inicializar cliente de Supabase
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://hkvkyldmzhyhzdkpepif.supabase.co';
+const SUPABASE_KEY = process.env.SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhrdmt5bGRtemh5aHpka3BlcGlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk4MTM5MzMsImV4cCI6MjEwNTM4OTkzM30.SCQ-uT75cCQ9MVc-zi3_6mM_b9-fLLdUQJyEJzEqDrE';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const app = express();
 app.use(express.json());
 app.use(express.static('public'));
