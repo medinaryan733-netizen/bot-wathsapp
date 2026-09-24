@@ -127,35 +127,6 @@ async function handleOwnerCommand(from, userMessage, rawMessage) {
     await sendWhatsAppMessage(from, ayudaTexto);
     return true;
   }
-// =========================================================
-  // 1. REENVÍO AUTOMÁTICO DE IMÁGENES (CON NOMBRE Y TELÉFONO)
-  // =========================================================
-  if (typeof rawMessage !== 'undefined' && rawMessage && rawMessage.type === 'image') {
-    const mediaId = rawMessage.image.id;
-    const captionCliente = rawMessage.image.caption || '';
-    const nombreCliente = rawMessage.contactName || rawMessage.pushName || 'Sin Nombre';
-
-    try {
-      // Reenvía la imagen a tu WhatsApp personal con los datos del cliente
-      await axios({
-        method: 'POST',
-        url: `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
-        headers: {
-          'Authorization': `Bearer ${WHATSAPP_TOKEN}`,
-          'Content-Type': 'application/json'
-        },
-        data: {
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to: OWNER_PHONE,
-          type: 'image',
-          image: {
-            id: mediaId,
-            caption: `📷 *Nueva imagen recibida*\n👤 *Cliente:* ${nombreCliente}\n📞 *Teléfono:* +${from}${captionCliente ? '\n💬 *Nota:* ' + captionCliente : ''}`
-          }
-        }
-      });
-
       // Confirmación automática al cliente
       await sendWhatsAppMessage(from, "📲 Recibí tu imagen. Un asesor la revisará a la brevedad.");
       return true;
