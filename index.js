@@ -122,17 +122,20 @@ async function checkVencimientos() {
 }
 setInterval(checkVencimientos, 24 * 60 * 60 * 1000);
 
-// HELPER PARA COMBINAR CLIENTES, CUENTAS Y SERVICIOS
+// HELPER PARA COMBINAR CLIENTES, CUENTAS Y SERVICIOS CON PIN Y CHANCES
 async function fetchFullClientes() {
-    const { data: clientes, error: errCli } = await supabase.from('CLIENTES').select('*, CUENTAS(*), SERVICIOS(*)');
+    const { data: clientes, error: errCli } = await supabase.from('CLIENTES').select('*, CUENTAS(*), SERVICIOS(*)').order('id', { ascending: true });
     if (errCli) {
         console.error('Error al traer clientes:', errCli.message);
         return [];
     }
 
     return (clientes || []).map(c => {
-        const cuentaObj = (c.CUENTAS && c.CUENTAS.length > 0) ? c.CUENTAS[0] : {};
-        const servicioObj = (c.SERVICIOS && c.SERVICIOS.length > 0) ? c.SERVICIOS[0] : {};
+        const ctas = c.CUENTAS || [];
+        const cuentaObj = ctas.length > 0 ? ctas[ctas.length - 1] : {};
+
+        const svcs = c.SERVICIOS || [];
+        const servicioObj = svcs.length > 0 ? svcs[svcs.length - 1] : {};
 
         const plataforma = cuentaObj.plataforma || servicioObj.servicio_id || '';
         const correo = cuentaObj.correo || servicioObj.usuario || '';
@@ -145,6 +148,7 @@ async function fetchFullClientes() {
             id: c.id,
             nombre: c.nombre || '',
             telefono: c.telefono || '',
+            chances: c.chances || 0,
             cuenta: {
                 id: cuentaObj.id || null,
                 servicio_id: servicioObj.id || null,
@@ -204,25 +208,25 @@ app.get('/api/dashboard-data', async (req, res) => {
 });
 
 app.post('/api/guardar-cliente', async (req, res) => {
-    const { telefono, nombre, plataforma, fecha_vencimiento, correo, clave, password, perfil, pin } = req.body;
+    const { telefono, nombre, plataforma, fecha_vencimiento, correo, clave, password, perfil, pin, chances } = req.body;
     const telClean = cleanNumber(telefono);
     const passValue = clave || password || '';
     const dateClean = (fecha_vencimiento && String(fecha_vencimiento).trim() !== '') ? fecha_vencimiento : null;
+    const numChances = chances ? Number(chances) : 1;
 
     try {
         let clientId = null;
-        const { data: existingCli } = await supabase.from('CLIENTES').select('id').eq('telefono', telClean).maybeSingle();
+        const { data: existingCli } = await supabase.from('CLIENTES').select('id, chances').eq('telefono', telClean).maybeSingle();
         
         if (existingCli) {
             clientId = existingCli.id;
-            await supabase.from('CLIENTES').update({ nombre, telefono: telClean }).eq('id', clientId);
+            await supabase.from('CLIENTES').update({ nombre, telefono: telClean, chances: (existingCli.chances || 0) + numChances }).eq('id', clientId);
         } else {
-            const { data: newCli, error: errNew } = await supabase.from('CLIENTES').insert([{ nombre, telefono: telClean }]).select().single();
+            const { data: newCli, error: errNew } = await supabase.from('CLIENTES').insert([{ nombre, telefono: telClean, chances: numChances }]).select().single();
             if (errNew) throw new Error('Error al crear cliente: ' + errNew.message);
             clientId = newCli.id;
         }
 
-        const { data: existingCta } = await supabase.from('CUENTAS').select('id').eq('cliente_id', clientId).maybeSingle();
         const ctaData = {
             cliente_id: clientId,
             plataforma: plataforma || 'Sin asignación',
@@ -234,13 +238,15 @@ app.post('/api/guardar-cliente', async (req, res) => {
             estado: 'ocupado'
         };
 
-        if (existingCta) {
-            await supabase.from('CUENTAS').update(ctaData).eq('id', existingCta.id);
+        const { data: existingCtas } = await supabase.from('CUENTAS').select('id').eq('cliente_id', clientId);
+        if (existingCtas && existingCtas.length > 0) {
+            for (const cta of existingCtas) {
+                await supabase.from('CUENTAS').update(ctaData).eq('id', cta.id);
+            }
         } else {
             await supabase.from('CUENTAS').insert([ctaData]);
         }
 
-        const { data: existingSvc } = await supabase.from('SERVICIOS').select('id').eq('cliente_id', clientId).maybeSingle();
         const svcData = {
             cliente_id: clientId,
             servicio_id: plataforma || 'Sin asignación',
@@ -251,8 +257,11 @@ app.post('/api/guardar-cliente', async (req, res) => {
             estado: 'ACTIVO'
         };
 
-        if (existingSvc) {
-            await supabase.from('SERVICIOS').update(svcData).eq('id', existingSvc.id);
+        const { data: existingSvcs } = await supabase.from('SERVICIOS').select('id').eq('cliente_id', clientId);
+        if (existingSvcs && existingSvcs.length > 0) {
+            for (const svc of existingSvcs) {
+                await supabase.from('SERVICIOS').update(svcData).eq('id', svc.id);
+            }
         } else {
             await supabase.from('SERVICIOS').insert([svcData]);
         }
@@ -265,19 +274,19 @@ app.post('/api/guardar-cliente', async (req, res) => {
 });
 
 app.post('/api/editar-cliente-completo', async (req, res) => {
-    const { clientId, nuevoTel, nombre, plataforma, correo, clave, password, perfil, pin, fecha_vencimiento } = req.body;
-    console.log('📝 Guardando cambios para cliente ID:', clientId);
+    const { clientId, nuevoTel, nombre, plataforma, correo, clave, password, perfil, pin, fecha_vencimiento, chances } = req.body;
+    console.log('📝 Guardando cambios de cliente ID:', clientId, 'PIN:', pin);
 
     try {
         const idNum = Number(clientId);
         const telClean = cleanNumber(nuevoTel);
         const passValue = clave || password || '';
         const dateClean = (fecha_vencimiento && String(fecha_vencimiento).trim() !== '') ? fecha_vencimiento : null;
+        const numChances = Number(chances || 0);
 
-        const { error: errCli } = await supabase.from('CLIENTES').update({ nombre, telefono: telClean }).eq('id', idNum);
+        const { error: errCli } = await supabase.from('CLIENTES').update({ nombre, telefono: telClean, chances: numChances }).eq('id', idNum);
         if (errCli) throw new Error('Error en CLIENTES: ' + errCli.message);
 
-        const { data: existingCta } = await supabase.from('CUENTAS').select('id').eq('cliente_id', idNum).maybeSingle();
         const ctaData = {
             cliente_id: idNum,
             plataforma: plataforma || 'Sin asignación',
@@ -289,13 +298,15 @@ app.post('/api/editar-cliente-completo', async (req, res) => {
             estado: 'ocupado'
         };
 
-        if (existingCta) {
-            await supabase.from('CUENTAS').update(ctaData).eq('id', existingCta.id);
+        const { data: existingCtas } = await supabase.from('CUENTAS').select('id').eq('cliente_id', idNum);
+        if (existingCtas && existingCtas.length > 0) {
+            for (const cta of existingCtas) {
+                await supabase.from('CUENTAS').update(ctaData).eq('id', cta.id);
+            }
         } else {
             await supabase.from('CUENTAS').insert([ctaData]);
         }
 
-        const { data: existingSvc } = await supabase.from('SERVICIOS').select('id').eq('cliente_id', idNum).maybeSingle();
         const svcData = {
             cliente_id: idNum,
             servicio_id: plataforma || 'Sin asignación',
@@ -306,13 +317,16 @@ app.post('/api/editar-cliente-completo', async (req, res) => {
             estado: 'ACTIVO'
         };
 
-        if (existingSvc) {
-            await supabase.from('SERVICIOS').update(svcData).eq('id', existingSvc.id);
+        const { data: existingSvcs } = await supabase.from('SERVICIOS').select('id').eq('cliente_id', idNum);
+        if (existingSvcs && existingSvcs.length > 0) {
+            for (const svc of existingSvcs) {
+                await supabase.from('SERVICIOS').update(svcData).eq('id', svc.id);
+            }
         } else {
             await supabase.from('SERVICIOS').insert([svcData]);
         }
 
-        console.log('✅ Cliente actualizado exitosamente:', idNum);
+        console.log('✅ Cliente y PIN guardados en Supabase:', idNum);
         res.json({ success: true });
     } catch (e) {
         console.error('❌ Error en /api/editar-cliente-completo:', e.message);
@@ -338,7 +352,7 @@ app.post('/api/chat-bot', async (req, res) => {
         const fullClientes = await fetchFullClientes();
         
         const listaResumen = fullClientes.map(c => {
-            return `• ${c.nombre} (+${c.telefono}) | Servicio: ${c.cuenta.plataforma || 'Sin asignación'} | Correo: ${c.cuenta.correo || '-'} | Vence: ${c.cuenta.fecha_vencimiento || 'N/A'}`;
+            return `• ${c.nombre} (+${c.telefono}) | Servicio: ${c.cuenta.plataforma || 'Sin asignación'} | Correo: ${c.cuenta.correo || '-'} | PIN: ${c.cuenta.pin || '-'} | Chances Sorteo: ${c.chances} | Vence: ${c.cuenta.fecha_vencimiento || 'N/A'}`;
         }).join('\n') || 'No hay clientes registrados actualmente.';
 
         const messagesFormatted = (historial || []).map(m => ({ role: m.role, content: m.content }));
@@ -347,7 +361,7 @@ app.post('/api/chat-bot', async (req, res) => {
         const response = await client.messages.create({
             model: 'claude-sonnet-4-6',
             max_tokens: 600,
-            system: SYSTEM_PROMPT + `\n\n[INFO INTERNA DEL PANEL WEB]: Estás conversando con RYAN (tu dueño). Tenés acceso en tiempo real a la lista de clientes cargados en Supabase:\n\n${listaResumen}\n\nSi Ryan te pregunta por clientes o vencimientos, respondé con esta información exacta.`,
+            system: SYSTEM_PROMPT + `\n\n[INFO INTERNA DEL PANEL WEB]: Estás conversando con RYAN (tu dueño). Tenés acceso en tiempo real a la lista de clientes cargados en Supabase:\n\n${listaResumen}\n\nSi Ryan te pregunta por clientes, chances de sorteo o vencimientos, respondé con esta información exacta.`,
             messages: messagesFormatted
         });
 
@@ -491,7 +505,8 @@ app.get('/', (req, res) => {
                             <th>Nombre</th>
                             <th>Teléfono</th>
                             <th>Servicio</th>
-                            <th>Correo / Clave / Perfil</th>
+                            <th>Correo / Clave / Perfil / PIN</th>
+                            <th>Chances Sorteo 🎟️</th>
                             <th>Vencimiento</th>
                             <th>Acciones</th>
                         </tr>
@@ -530,10 +545,10 @@ app.get('/', (req, res) => {
             <!-- TAB 4: CHAT DIRECTO CON ALICE & CONTROL BOT -->
             <div id="tabBot" class="tab-content">
                 <h3>💬 Hablar Directamente con ALICE</h3>
-                <p style="color:var(--muted); font-size:0.85rem; margin-bottom:10px;">Podés consultarle dudas o pedirle información sobre tus clientes.</p>
+                <p style="color:var(--muted); font-size:0.85rem; margin-bottom:10px;">Podés consultarle dudas o pedirle información sobre tus clientes y chances de sorteo.</p>
                 <div class="chat-container">
                     <div class="chat-messages" id="chatMessages">
-                        <div class="chat-msg bot">¡Hola Ryan! ¿En qué te ayudo hoy? Conozco tus clientes y servicios cargados. 😊</div>
+                        <div class="chat-msg bot">¡Hola Ryan! ¿En qué te ayudo hoy? Conozco tus clientes y chances de sorteo. 😊</div>
                     </div>
                     <div class="chat-input-row">
                         <input type="text" id="chatInputText" placeholder="Escribí un mensaje para ALICE..." onkeydown="if(event.key==='Enter') sendWebChat()">
@@ -566,6 +581,7 @@ app.get('/', (req, res) => {
                     <input type="text" id="addPass" placeholder="Contraseña / Clave asignada (Opcional)">
                     <input type="text" id="addPerfil" placeholder="Perfil asignado (Opcional)">
                     <input type="text" id="addPin" placeholder="PIN asignado (Opcional)">
+                    <input type="number" id="addChances" placeholder="Chances para el sorteo (Por defecto: 1)" value="1">
                     <button type="submit" class="btn-primary">Registrar Cliente en Supabase</button>
                 </form>
             </div>
@@ -587,11 +603,13 @@ app.get('/', (req, res) => {
                 <input type="text" id="editMail" placeholder="Correo">
                 <label style="font-size:0.8rem; color:var(--muted);">Contraseña / Clave:</label>
                 <input type="text" id="editPass" placeholder="Contraseña / Clave">
-                <label style="font-size:0.8rem; color:var(--muted);">Perfil / PIN:</label>
+                <label style="font-size:0.8rem; color:var(--muted);">Perfil y PIN:</label>
                 <div style="display:flex; gap:10px;">
                     <input type="text" id="editPerfil" placeholder="Perfil">
                     <input type="text" id="editPin" placeholder="PIN">
                 </div>
+                <label style="font-size:0.8rem; color:var(--muted);">Chances para el Sorteo 🎟️:</label>
+                <input type="number" id="editChances" placeholder="Chances">
                 <label style="font-size:0.8rem; color:var(--muted);">Fecha de Vencimiento:</label>
                 <input type="date" id="editVenc">
                 <button id="btnSaveEdit" onclick="saveEditClienteCompleto()" class="btn-primary">Guardar Cambios</button>
@@ -679,13 +697,16 @@ app.get('/', (req, res) => {
                 tbody.innerHTML = '';
                 lista.forEach((c, index) => {
                     const cuenta = c.cuenta || {};
-                    const mailPass = (cuenta.correo || cuenta.clave) ? \`\${cuenta.correo || '-'} / \${cuenta.clave || '-'} / P:\${cuenta.perfil || '-'} (PIN:\${cuenta.pin || '-'})\` : 'Sin datos';
+                    const mailPass = (cuenta.correo || cuenta.clave) 
+                        ? \`\${cuenta.correo || '-'} / \${cuenta.clave || '-'} / P:\${cuenta.perfil || '-'} (PIN:\${cuenta.pin || '-'})\` 
+                        : 'Sin datos';
                     tbody.innerHTML += \`
                         <tr>
                             <td><strong>\${c.nombre}</strong></td>
                             <td>+\${c.telefono}</td>
                             <td>\${cuenta.plataforma || 'Sin servicio'}</td>
                             <td><small>\${mailPass}</small></td>
+                            <td><strong>\${c.chances || 0} 🎟️</strong></td>
                             <td>\${cuenta.fecha_vencimiento || '-'}</td>
                             <td>
                                 <button class="btn-edit" onclick="openEditModal(\${index})">✏️ Editar</button>
@@ -736,6 +757,7 @@ app.get('/', (req, res) => {
                 document.getElementById('editPass').value = cuenta.clave || '';
                 document.getElementById('editPerfil').value = cuenta.perfil || '';
                 document.getElementById('editPin').value = cuenta.pin || '';
+                document.getElementById('editChances').value = clientObj.chances || 0;
                 document.getElementById('editVenc').value = cuenta.fecha_vencimiento || '';
                 
                 document.getElementById('editModal').style.display = 'flex';
@@ -757,6 +779,7 @@ app.get('/', (req, res) => {
                     clave: document.getElementById('editPass').value,
                     perfil: document.getElementById('editPerfil').value,
                     pin: document.getElementById('editPin').value,
+                    chances: document.getElementById('editChances').value,
                     fecha_vencimiento: document.getElementById('editVenc').value
                 };
 
@@ -849,9 +872,10 @@ app.get('/', (req, res) => {
                     clave: document.getElementById('addPass').value,
                     perfil: document.getElementById('addPerfil').value,
                     pin: document.getElementById('addPin').value,
+                    chances: document.getElementById('addChances').value
                 };
                 await fetch('/api/guardar-cliente', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-                alert('✅ Cliente registrado en Supabase');
+                alert('✅ Cliente registrado en Supabase con sus chances');
                 document.getElementById('formAddClient').reset();
                 loadDashboardData();
             });
@@ -983,9 +1007,10 @@ app.post('/webhook', async (req, res) => {
                     if (cuentaData.pin) msgCliente += `\n🔢 *PIN:* ${cuentaData.pin}`;
                     msgCliente += `\n\n⚠️ *Importante:* No modifiques los datos. ¡Gracias por elegirnos! - NEXXUS`;
 
-                    const { data: clientObj } = await supabase.from('CLIENTES').select('id').eq('telefono', targetPhone).maybeSingle();
+                    const { data: clientObj } = await supabase.from('CLIENTES').select('id, chances').eq('telefono', targetPhone).maybeSingle();
                     if (clientObj) {
                         await supabase.from('CUENTAS').update({ estado: 'ocupado', cliente_id: clientObj.id }).eq('id', cuentaData.id);
+                        await supabase.from('CLIENTES').update({ chances: (clientObj.chances || 0) + 1 }).eq('id', clientObj.id);
                     }
                     await sendWhatsAppMessage(targetPhone, msgCliente);
                     await sendWhatsAppMessage(from, `✅ Cuenta de ${cuentaData.plataforma} entregada desde Supabase a +${targetPhone}`);
@@ -1001,10 +1026,19 @@ app.post('/webhook', async (req, res) => {
                     const serv = partes[2].trim();
                     const fec = partes[3].trim();
 
-                    const { data: newCli } = await supabase.from('CLIENTES').insert([{ telefono: tel, nombre: nom }]).select().single();
-                    if (newCli) {
-                        await supabase.from('CUENTAS').insert([{ cliente_id: newCli.id, plataforma: serv, fecha_vencimiento: fec, estado: 'ocupado' }]);
-                        await supabase.from('SERVICIOS').insert([{ cliente_id: newCli.id, servicio_id: serv, fecha_vencimiento: fec, estado: 'ACTIVO' }]);
+                    const { data: existingCli } = await supabase.from('CLIENTES').select('id, chances').eq('telefono', tel).maybeSingle();
+                    let clientId = existingCli?.id;
+
+                    if (clientId) {
+                        await supabase.from('CLIENTES').update({ nombre: nom, chances: (existingCli.chances || 0) + 1 }).eq('id', clientId);
+                    } else {
+                        const { data: newCli } = await supabase.from('CLIENTES').insert([{ telefono: tel, nombre: nom, chances: 1 }]).select().single();
+                        clientId = newCli?.id;
+                    }
+
+                    if (clientId) {
+                        await supabase.from('CUENTAS').insert([{ cliente_id: clientId, plataforma: serv, fecha_vencimiento: fec, estado: 'ocupado' }]);
+                        await supabase.from('SERVICIOS').insert([{ cliente_id: clientId, servicio_id: serv, fecha_vencimiento: fec, estado: 'ACTIVO' }]);
                     }
                     await sendWhatsAppMessage(from, `✅ Cliente cargado en Supabase:\n👤 ${nom}\n📱 +${tel}\n📦 ${serv}\n📅 Vence: ${fec}`);
                 }
