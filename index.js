@@ -10,22 +10,19 @@ app.use(express.urlencoded({ extended: true }));
 const PORT = process.env.PORT || 10000;
 
 // ==========================================
-// CONFIGURACIÓN DE ENTORNO
+// CONFIGURACIÓN DE ENTORNO Y CREDENCIALES
 // ==========================================
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'NEXXUS_ALICE_SECRET';
 const OWNER_PHONE = process.env.OWNER_PHONE || '';
 
-// CREDENCIALES DEL PANEL WEB
 const ADMIN_USER = 'Ryan98730';
 const ADMIN_PASS = 'Sol12345';
 
-// INICIALIZAR ANTHROPIC Y SUPABASE
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
-// MEMORIA TEMPORAL PARA ESTADOS
 const pausedChats = {};
 let promoActiva = null;
 
@@ -76,7 +73,7 @@ REGLAS DE ATENCIÓN Y PROMOCIONES:
 - HORARIO NOCTURNO: Si son pasadas las 00:00, aclara que Ryan ya debe estar descansando y que el problema se solucionará a primera hora.`;
 
 // ==========================================
-// FUNCIONES DE WHATSAPP Y CRON
+// WHATSAPP HELPER & CRON
 // ==========================================
 async function sendWhatsAppMessage(to, text) {
     try {
@@ -126,14 +123,14 @@ async function checkVencimientos() {
 setInterval(checkVencimientos, 24 * 60 * 60 * 1000);
 
 // ==========================================
-// ENDPOINTS API PARA EL PANEL WEB
+// ENDPOINTS DE LA API DEL PANEL WEB
 // ==========================================
 app.post('/api/login', (req, res) => {
     const { user, pass } = req.body;
     if (user === ADMIN_USER && pass === ADMIN_PASS) {
-        res.json({ success: true, token: 'NEXXUS_SESSION_ACTIVE' });
+        res.json({ success: true });
     } else {
-        res.status(401).json({ success: false, message: 'Usuario o contraseña incorrectos' });
+        res.status(401).json({ success: false, message: 'Credenciales incorrectas' });
     }
 });
 
@@ -145,7 +142,6 @@ app.get('/api/dashboard-data', async (req, res) => {
     const stockDisponible = cuentas?.filter(c => c.estado === 'disponible').length || 0;
     const cuentasOcupadas = cuentas?.filter(c => c.estado === 'ocupado').length || 0;
     
-    // Próximos vencimientos (dentro de los próximos 3 días)
     const hoy = new Date();
     const proxsVencimientos = cuentas?.filter(c => {
         if (!c.fecha_vencimiento || c.estado !== 'ocupado') return false;
@@ -184,26 +180,71 @@ app.post('/api/guardar-cliente', async (req, res) => {
     res.json({ success: true });
 });
 
-app.post('/api/actualizar-cuenta', async (req, res) => {
-    const { id, plataforma, correo, password, perfil, pin, fecha_vencimiento, estado } = req.body;
-    await supabase.from('CUENTAS').update({
-        plataforma, correo, password, perfil, pin, fecha_vencimiento, estado
-    }).eq('id', id);
+// EDICIÓN COMPLETA DEL CLIENTE Y SU CUENTA
+app.post('/api/editar-cliente-completo', async (req, res) => {
+    const { originalTel, nuevoTel, nombre, cuentaId, plataforma, correo, password, perfil, pin, fecha_vencimiento } = req.body;
+    try {
+        const oldTelClean = cleanNumber(originalTel);
+        const newTelClean = cleanNumber(nuevoTel);
 
-    res.json({ success: true });
+        if (oldTelClean !== newTelClean) {
+            await supabase.from('CLIENTES').update({ telefono: newTelClean, nombre }).eq('telefono', oldTelClean);
+            await supabase.from('CUENTAS').update({ cliente_id: newTelClean }).eq('cliente_id', oldTelClean);
+        } else {
+            await supabase.from('CLIENTES').update({ nombre }).eq('telefono', oldTelClean);
+        }
+
+        if (cuentaId) {
+            await supabase.from('CUENTAS').update({
+                plataforma, correo, password, perfil, pin, fecha_vencimiento
+            }).eq('id', cuentaId);
+        }
+
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// ENVIAR MENSAJE DIRECTO POR WHATSAPP A UN CLIENTE DESDE EL PANEL
+app.post('/api/enviar-mensaje-cliente', async (req, res) => {
+    const { telefono, mensaje } = req.body;
+    try {
+        const telClean = cleanNumber(telefono);
+        await sendWhatsAppMessage(telClean, mensaje);
+        await supabase.from('messages').insert([{ phone: telClean, role: 'assistant', content: mensaje }]);
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// CHAT DIRECTO CON ALICE DESDE EL PANEL
+app.post('/api/chat-bot', async (req, res) => {
+    const { mensaje, historial } = req.body;
+    try {
+        const messagesFormatted = (historial || []).map(m => ({ role: m.role, content: m.content }));
+        messagesFormatted.push({ role: 'user', content: mensaje });
+
+        const response = await client.messages.create({
+            model: 'claude-sonnet-4-6',
+            max_tokens: 500,
+            system: SYSTEM_PROMPT + `\n\n[INFO INTERNA]: Estás conversando con RYAN (tu dueño) a través de la consola interactiva del PANEL WEB. Asístelo amablemente en todo lo que te pida sobre la gestión del negocio.`,
+            messages: messagesFormatted
+        });
+
+        const botReply = response.content[0].text;
+        res.json({ success: true, reply: botReply });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
 });
 
 app.post('/api/agregar-stock', async (req, res) => {
     const { plataforma, correo, password, perfil, pin } = req.body;
     await supabase.from('CUENTAS').insert([{
-        plataforma,
-        correo,
-        password,
-        perfil: perfil || '',
-        pin: pin || '',
-        estado: 'disponible'
+        plataforma, correo, password, perfil: perfil || '', pin: pin || '', estado: 'disponible'
     }]);
-
     res.json({ success: true });
 });
 
@@ -222,7 +263,7 @@ app.post('/api/control-bot', async (req, res) => {
 });
 
 // ==========================================
-// INTERFAZ GRÁFICA COMPLETA DEL PANEL WEB
+// INTERFAZ GRÁFICA DEL PANEL WEB
 // ==========================================
 app.get('/', (req, res) => {
     const html = `
@@ -231,50 +272,53 @@ app.get('/', (req, res) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Panel de Control NEXXUS - ALICE</title>
+        <title>Panel NEXXUS - Control ALICE</title>
         <style>
             :root { --bg: #0f172a; --card: #1e293b; --accent: #10b981; --text: #f8fafc; --muted: #94a3b8; --border: #334155; }
             * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
             body { background: var(--bg); color: var(--text); padding: 20px; min-height: 100vh; }
             
-            /* LOGIN SCREEN */
             #loginScreen { max-width: 400px; margin: 80px auto; background: var(--card); padding: 30px; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
             #loginScreen h2 { margin-bottom: 20px; text-align: center; color: var(--accent); }
 
-            /* DASHBOARD CONTAINER */
             #dashboardContainer { max-width: 1200px; margin: 0 auto; display: none; }
             header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
 
-            /* NAV TABS */
             .tabs { display: flex; gap: 10px; margin-bottom: 20px; overflow-x: auto; }
             .tab-btn { background: var(--card); color: var(--muted); border: 1px solid var(--border); padding: 12px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; transition: all 0.2s; white-space: nowrap; }
             .tab-btn.active, .tab-btn:hover { background: var(--accent); color: #000; border-color: var(--accent); }
 
-            /* TAB CONTENT */
             .tab-content { display: none; background: var(--card); padding: 25px; border-radius: 12px; border: 1px solid var(--border); }
             .tab-content.active { display: block; }
 
-            /* METRIC CARDS */
             .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
             .metric-card { background: #0f172a; padding: 20px; border-radius: 8px; border: 1px solid var(--border); text-align: center; }
             .metric-card h3 { font-size: 2rem; color: var(--accent); margin-bottom: 5px; }
             .metric-card p { color: var(--muted); font-size: 0.9rem; }
 
-            /* FORMS & INPUTS */
-            input, select, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 6px; border: 1px solid var(--border); background: #0f172a; color: var(--text); font-size: 0.95rem; }
+            input, select, textarea, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 6px; border: 1px solid var(--border); background: #0f172a; color: var(--text); font-size: 0.95rem; }
             button.btn-primary { background: var(--accent); color: #000; font-weight: bold; border: none; cursor: pointer; transition: 0.2s; }
             button.btn-primary:hover { opacity: 0.9; }
             button.btn-danger { background: #ef4444; color: #fff; border: none; cursor: pointer; padding: 6px 12px; width: auto; border-radius: 4px; }
             button.btn-edit { background: #3b82f6; color: #fff; border: none; cursor: pointer; padding: 6px 12px; width: auto; border-radius: 4px; margin-right: 5px; }
+            button.btn-msg { background: #8b5cf6; color: #fff; border: none; cursor: pointer; padding: 6px 12px; width: auto; border-radius: 4px; margin-right: 5px; }
 
-            /* TABLES */
             table { width: 100%; border-collapse: collapse; margin-top: 15px; }
             th, td { padding: 12px; text-align: left; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
             th { background: #0f172a; color: var(--accent); }
 
-            /* MODAL EDITAR */
-            #editModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 100; justify-content: center; align-items: center; }
+            .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 100; justify-content: center; align-items: center; }
             .modal-box { background: var(--card); padding: 25px; border-radius: 12px; max-width: 500px; width: 90%; border: 1px solid var(--border); }
+
+            /* CHAT BOX UI */
+            .chat-container { display: flex; flex-direction: column; height: 400px; background: #0f172a; border-radius: 8px; border: 1px solid var(--border); padding: 15px; }
+            .chat-messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+            .chat-msg { max-width: 80%; padding: 10px 14px; border-radius: 8px; font-size: 0.95rem; }
+            .chat-msg.user { align-self: flex-end; background: var(--accent); color: #000; font-weight: 500; }
+            .chat-msg.bot { align-self: flex-start; background: #334155; color: #fff; }
+            .chat-input-row { display: flex; gap: 10px; }
+            .chat-input-row input { flex: 1; margin: 0; }
+            .chat-input-row button { width: auto; margin: 0; padding: 0 20px; }
         </style>
     </head>
     <body>
@@ -289,7 +333,7 @@ app.get('/', (req, res) => {
             </form>
         </div>
 
-        <!-- DASHBOARD PRINCIPAL -->
+        <!-- DASHBOARD CONTAINER -->
         <div id="dashboardContainer">
             <header>
                 <h2>⚡ NEXXUS Control Panel</h2>
@@ -301,7 +345,7 @@ app.get('/', (req, res) => {
                 <button class="tab-btn active" onclick="switchTab('tabResumen')">1. 📊 Resumen</button>
                 <button class="tab-btn" onclick="switchTab('tabClientes')">2. 👥 Clientes</button>
                 <button class="tab-btn" onclick="switchTab('tabStock')">3. 📦 Stock / Cuentas</button>
-                <button class="tab-btn" onclick="switchTab('tabBot')">4. 🤖 Control Bot</button>
+                <button class="tab-btn" onclick="switchTab('tabBot')">4. 🤖 Chat & Control Bot</button>
                 <button class="tab-btn" onclick="switchTab('tabAgregar')">5. ➕ Agregar Cliente</button>
             </div>
 
@@ -360,16 +404,29 @@ app.get('/', (req, res) => {
                 </table>
             </div>
 
-            <!-- TAB 4: CONTROL BOT -->
+            <!-- TAB 4: CHAT DIRECTO CON ALICE & CONTROL BOT -->
             <div id="tabBot" class="tab-content">
-                <h3>Estado y Configuración de ALICE</h3>
+                <h3>💬 Hablar Directamente con ALICE</h3>
+                <p style="color:var(--muted); font-size:0.85rem; margin-bottom:10px;">Podés consultarle dudas o interactuar con ella sin necesidad de comandos.</p>
+                <div class="chat-container">
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="chat-msg bot">¡Hola Ryan! ¿En qué te ayudo hoy con el negocio o el bot? 😊</div>
+                    </div>
+                    <div class="chat-input-row">
+                        <input type="text" id="chatInputText" placeholder="Escribí un mensaje para ALICE..." onkeydown="if(event.key==='Enter') sendWebChat()">
+                        <button onclick="sendWebChat()" class="btn-primary">Enviar</button>
+                    </div>
+                </div>
+
+                <hr style="border-color:var(--border); margin:25px 0;">
+
+                <h3>⚙️ Ajustes del Bot</h3>
                 <br>
-                <p><strong>Pausa Global del Bot:</strong> <span id="lblBotPausa">Activo</span></p>
+                <p><strong>Estado del Bot:</strong> <span id="lblBotPausa">Activo</span></p>
                 <button onclick="togglePausaBot()" class="btn-primary" style="max-width:250px; margin-top:10px;">Cambiar Estado Bot</button>
-                <hr style="border-color:var(--border); margin:20px 0;">
-                
+                <br><br>
                 <h3>Promoción Global Activa</h3>
-                <input type="text" id="txtPromoGlobal" placeholder="Escribe el texto de la promo (Ej: 2x1 en Disney este finde)">
+                <input type="text" id="txtPromoGlobal" placeholder="Texto de la promo (Ej: 2x1 este finde en Disney+)">
                 <button onclick="guardarPromo()" class="btn-primary" style="max-width:250px;">Activar Promo</button>
                 <button onclick="desactivarPromo()" style="max-width:250px; background:#ef4444; color:#fff; border:none; padding:12px; border-radius:6px; cursor:pointer;">Apagar Promo</button>
             </div>
@@ -392,19 +449,43 @@ app.get('/', (req, res) => {
 
         </div>
 
-        <!-- MODAL EDITAR CUENTA -->
-        <div id="editModal">
+        <!-- MODAL EDITAR COMPLETO -->
+        <div id="editModal" class="modal">
             <div class="modal-box">
-                <h3>✏️ Editar Datos del Cliente / Cuenta</h3>
+                <h3>✏️ Editar Datos del Cliente</h3>
+                <input type="hidden" id="editOriginalTel">
                 <input type="hidden" id="editCuentaId">
+                <label style="font-size:0.8rem; color:var(--muted);">Nombre del Cliente:</label>
+                <input type="text" id="editNom" placeholder="Nombre">
+                <label style="font-size:0.8rem; color:var(--muted);">Teléfono WhatsApp:</label>
+                <input type="text" id="editTel" placeholder="Teléfono">
+                <label style="font-size:0.8rem; color:var(--muted);">Servicio / Plataforma:</label>
                 <input type="text" id="editPlat" placeholder="Plataforma">
+                <label style="font-size:0.8rem; color:var(--muted);">Correo:</label>
                 <input type="text" id="editMail" placeholder="Correo">
+                <label style="font-size:0.8rem; color:var(--muted);">Contraseña:</label>
                 <input type="text" id="editPass" placeholder="Contraseña">
-                <input type="text" id="editPerfil" placeholder="Perfil">
-                <input type="text" id="editPin" placeholder="PIN">
+                <label style="font-size:0.8rem; color:var(--muted);">Perfil / PIN:</label>
+                <div style="display:flex; gap:10px;">
+                    <input type="text" id="editPerfil" placeholder="Perfil">
+                    <input type="text" id="editPin" placeholder="PIN">
+                </div>
+                <label style="font-size:0.8rem; color:var(--muted);">Fecha de Vencimiento:</label>
                 <input type="date" id="editVenc">
-                <button onclick="saveEditCuenta()" class="btn-primary">Guardar Cambios</button>
+                <button onclick="saveEditClienteCompleto()" class="btn-primary">Guardar Cambios</button>
                 <button onclick="closeEditModal()" style="background:#ef4444; color:#fff; border:none; padding:12px; width:100%; border-radius:6px; cursor:pointer; margin-top:5px;">Cancelar</button>
+            </div>
+        </div>
+
+        <!-- MODAL ENVIAR MENSAJE WHATSAPP -->
+        <div id="msgModal" class="modal">
+            <div class="modal-box">
+                <h3>💬 Enviar WhatsApp al Cliente</h3>
+                <p id="lblMsgDestinatario" style="color:var(--accent); font-weight:bold; margin-top:5px;"></p>
+                <input type="hidden" id="msgTelTarget">
+                <textarea id="txtMsgContent" rows="4" placeholder="Escribí tu mensaje acá..." style="resize:vertical;"></textarea>
+                <button onclick="sendDirectWhatsApp()" class="btn-primary">Enviar por WhatsApp</button>
+                <button onclick="closeMsgModal()" style="background:#ef4444; color:#fff; border:none; padding:12px; width:100%; border-radius:6px; cursor:pointer; margin-top:5px;">Cancelar</button>
             </div>
         </div>
 
@@ -412,8 +493,8 @@ app.get('/', (req, res) => {
             let localClientes = [];
             let localCuentas = [];
             let botPausadoEstado = false;
+            let webChatHistory = [];
 
-            // LOGIN
             document.getElementById('formLogin').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const user = document.getElementById('loginUser').value;
@@ -446,7 +527,6 @@ app.get('/', (req, res) => {
                 location.reload();
             }
 
-            // TABS SWITCH
             function switchTab(tabId) {
                 document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
                 document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -454,7 +534,6 @@ app.get('/', (req, res) => {
                 event.target.classList.add('active');
             }
 
-            // LOAD DATA
             async function loadDashboardData() {
                 const res = await fetch('/api/dashboard-data');
                 const data = await res.json();
@@ -473,7 +552,6 @@ app.get('/', (req, res) => {
                 renderStockTable(localCuentas);
             }
 
-            // RENDER CLIENTES
             function renderClientesTable(lista) {
                 const tbody = document.getElementById('tblClientes');
                 tbody.innerHTML = '';
@@ -488,7 +566,8 @@ app.get('/', (req, res) => {
                             <td><small>\${mailPass}</small></td>
                             <td>\${cuenta.fecha_vencimiento || '-'}</td>
                             <td>
-                                \${cuenta.id ? \`<button class="btn-edit" onclick="openEditModal(\${cuenta.id}, '\${cuenta.plataforma}', '\${cuenta.correo||''}', '\${cuenta.password||''}', '\${cuenta.perfil||''}', '\${cuenta.pin||''}', '\${cuenta.fecha_vencimiento||''}')">✏️ Editar</button>\` : ''}
+                                <button class="btn-edit" onclick="openEditModal('\${c.telefono}', '\${c.nombre}', \${cuenta.id || null}, '\${cuenta.plataforma||''}', '\${cuenta.correo||''}', '\${cuenta.password||''}', '\${cuenta.perfil||''}', '\${cuenta.pin||''}', '\${cuenta.fecha_vencimiento||''}')">✏️ Editar</button>
+                                <button class="btn-msg" onclick="openMsgModal('\${c.telefono}', '\${c.nombre}')">💬 Mensaje</button>
                                 <button class="btn-danger" onclick="eliminarCliente('\${c.telefono}')">🗑️</button>
                             </td>
                         </tr>
@@ -496,7 +575,6 @@ app.get('/', (req, res) => {
                 });
             }
 
-            // RENDER STOCK
             function renderStockTable(lista) {
                 const tbody = document.getElementById('tblStock');
                 tbody.innerHTML = '';
@@ -523,7 +601,103 @@ app.get('/', (req, res) => {
                 renderClientesTable(filtered);
             }
 
-            // FORMS HANDLERS
+            // EDICIÓN COMPLETA DEL CLIENTE
+            function openEditModal(originalTel, nom, cuentaId, plat, mail, pass, perfil, pin, venc) {
+                document.getElementById('editOriginalTel').value = originalTel;
+                document.getElementById('editNom').value = nom;
+                document.getElementById('editTel').value = originalTel;
+                document.getElementById('editCuentaId').value = cuentaId || '';
+                document.getElementById('editPlat').value = plat;
+                document.getElementById('editMail').value = mail;
+                document.getElementById('editPass').value = pass;
+                document.getElementById('editPerfil').value = perfil;
+                document.getElementById('editPin').value = pin;
+                document.getElementById('editVenc').value = venc;
+                document.getElementById('editModal').style.display = 'flex';
+            }
+
+            function closeEditModal() { document.getElementById('editModal').style.display = 'none'; }
+
+            async function saveEditClienteCompleto() {
+                const body = {
+                    originalTel: document.getElementById('editOriginalTel').value,
+                    nuevoTel: document.getElementById('editTel').value,
+                    nombre: document.getElementById('editNom').value,
+                    cuentaId: document.getElementById('editCuentaId').value,
+                    plataforma: document.getElementById('editPlat').value,
+                    correo: document.getElementById('editMail').value,
+                    password: document.getElementById('editPass').value,
+                    perfil: document.getElementById('editPerfil').value,
+                    pin: document.getElementById('editPin').value,
+                    fecha_vencimiento: document.getElementById('editVenc').value
+                };
+
+                await fetch('/api/editar-cliente-completo', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(body)
+                });
+
+                closeEditModal();
+                alert('✅ Datos del cliente actualizados');
+                loadDashboardData();
+            }
+
+            // ENVIAR MENSAJE DIRECTO
+            function openMsgModal(tel, nombre) {
+                document.getElementById('msgTelTarget').value = tel;
+                document.getElementById('lblMsgDestinatario').textContent = \`Para: \${nombre} (+\${tel})\`;
+                document.getElementById('txtMsgContent').value = '';
+                document.getElementById('msgModal').style.display = 'flex';
+            }
+
+            function closeMsgModal() { document.getElementById('msgModal').style.display = 'none'; }
+
+            async function sendDirectWhatsApp() {
+                const tel = document.getElementById('msgTelTarget').value;
+                const mensaje = document.getElementById('txtMsgContent').value;
+                if (!mensaje.trim()) return alert('Escribe un mensaje');
+
+                const res = await fetch('/api/enviar-mensaje-cliente', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ telefono: tel, mensaje })
+                });
+
+                if (res.ok) {
+                    alert('✅ Mensaje enviado exitosamente');
+                    closeMsgModal();
+                } else {
+                    alert('❌ Error al enviar el mensaje');
+                }
+            }
+
+            // CHAT WEB DIRECTO CON ALICE
+            async function sendWebChat() {
+                const input = document.getElementById('chatInputText');
+                const text = input.value.trim();
+                if (!text) return;
+
+                const chatBox = document.getElementById('chatMessages');
+                chatBox.innerHTML += \`<div class="chat-msg user">\${text}</div>\`;
+                input.value = '';
+                chatBox.scrollTop = chatBox.scrollHeight;
+
+                const res = await fetch('/api/chat-bot', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ mensaje: text, historial: webChatHistory })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    webChatHistory.push({ role: 'user', content: text });
+                    webChatHistory.push({ role: 'assistant', content: data.reply });
+                    chatBox.innerHTML += \`<div class="chat-msg bot">\${data.reply}</div>\`;
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                }
+            }
+
             document.getElementById('formAddClient').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const body = {
@@ -556,37 +730,6 @@ app.get('/', (req, res) => {
                 document.getElementById('formCargarStock').reset();
                 loadDashboardData();
             });
-
-            // EDIT MODAL
-            function openEditModal(id, plat, mail, pass, perfil, pin, venc) {
-                document.getElementById('editCuentaId').value = id;
-                document.getElementById('editPlat').value = plat;
-                document.getElementById('editMail').value = mail;
-                document.getElementById('editPass').value = pass;
-                document.getElementById('editPerfil').value = perfil;
-                document.getElementById('editPin').value = pin;
-                document.getElementById('editVenc').value = venc;
-                document.getElementById('editModal').style.display = 'flex';
-            }
-
-            function closeEditModal() { document.getElementById('editModal').style.display = 'none'; }
-
-            async function saveEditCuenta() {
-                const body = {
-                    id: document.getElementById('editCuentaId').value,
-                    plataforma: document.getElementById('editPlat').value,
-                    correo: document.getElementById('editMail').value,
-                    password: document.getElementById('editPass').value,
-                    perfil: document.getElementById('editPerfil').value,
-                    pin: document.getElementById('editPin').value,
-                    fecha_vencimiento: document.getElementById('editVenc').value,
-                    estado: 'ocupado'
-                };
-                await fetch('/api/actualizar-cuenta', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-                closeEditModal();
-                alert('✅ Datos actualizados');
-                loadDashboardData();
-            }
 
             async function eliminarCliente(tel) {
                 if (confirm('¿Seguro que deseas eliminar este cliente?')) {
@@ -646,7 +789,6 @@ app.post('/webhook', async (req, res) => {
 
         const textMessage = type === 'text' ? message.text.body : '';
 
-        // COMANDOS DEL DUEÑO
         if (isOwner && type === 'text') {
             const rawMsg = textMessage.trim();
             const lowerCmd = rawMsg.toLowerCase();
@@ -750,7 +892,6 @@ app.post('/webhook', async (req, res) => {
 
         if (pausedChats['TODOS'] || pausedChats[from]) return;
 
-        // MANEJO DE IMÁGENES
         if (type === 'image') {
             const mediaId = message.image.id;
             const caption = message.image.caption || '';
@@ -769,13 +910,11 @@ app.post('/webhook', async (req, res) => {
             return;
         }
 
-        // RECHAZO DE AUDIOS
         if (type === 'audio') {
             await sendWhatsAppMessage(from, "Hola! Por ahora solo puedo procesar mensajes de texto. ¿Podrías escribirme tu consulta? 😊");
             return;
         }
 
-        // ATENCIÓN CON CLAUDE
         if (type === 'text') {
             const lowerUserText = textMessage.toLowerCase();
 
