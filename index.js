@@ -243,7 +243,19 @@ client.on('message', async (msg) => {
         console.error('Error con Gemini:', error);
     }
 });
+client.on('message', async msg => {
+    console.log('Mensaje recibido de:', msg.from, 'Texto:', msg.body);
+    
+    // Evitar que el bot se responda a sí mismo o responda a estados
+    if (msg.fromMe || msg.from === 'status@broadcast') return;
 
+    try {
+        // Aquí puedes poner una respuesta de prueba básica o la lógica de Gemini
+        await msg.reply('¡Hola! Soy ALICE, tu asistente de NEXXUS. Recibí tu mensaje.');
+    } catch (error) {
+        console.error('Error al responder el mensaje:', error);
+    }
+});
 client.initialize();
 
 // ==========================================
