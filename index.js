@@ -219,17 +219,25 @@ app.post('/api/enviar-mensaje-cliente', async (req, res) => {
     }
 });
 
-// CHAT DIRECTO CON ALICE DESDE EL PANEL
+// CHAT DIRECTO CON ALICE DESDE EL PANEL (CON CONTEXTO DE BASE DE DATOS)
 app.post('/api/chat-bot', async (req, res) => {
     const { mensaje, historial } = req.body;
     try {
+        // Obtenemos clientes y cuentas en tiempo real desde Supabase
+        const { data: clientes } = await supabase.from('CLIENTES').select('*, CUENTAS(*)');
+        
+        const listaResumen = clientes?.map(c => {
+            const cuenta = c.CUENTAS?.[0] || {};
+            return `• ${c.nombre} (+${c.telefono}) | Servicio: ${cuenta.plataforma || 'Sin asignación'} | Vence: ${cuenta.fecha_vencimiento || 'N/A'}`;
+        }).join('\n') || 'No hay clientes registrados actualmente.';
+
         const messagesFormatted = (historial || []).map(m => ({ role: m.role, content: m.content }));
         messagesFormatted.push({ role: 'user', content: mensaje });
 
         const response = await client.messages.create({
             model: 'claude-sonnet-4-6',
-            max_tokens: 500,
-            system: SYSTEM_PROMPT + `\n\n[INFO INTERNA]: Estás conversando con RYAN (tu dueño) a través de la consola interactiva del PANEL WEB. Asístelo amablemente en todo lo que te pida sobre la gestión del negocio.`,
+            max_tokens: 600,
+            system: SYSTEM_PROMPT + `\n\n[INFO INTERNA DEL PANEL WEB]: Estás conversando directamente con RYAN (tu dueño). Tenés acceso a la lista actualizada de clientes en Supabase:\n\n${listaResumen}\n\nSi Ryan te pregunta por clientes, datos de ventas o vencimientos, usá esta lista para responderle con precisión.`,
             messages: messagesFormatted
         });
 
@@ -239,7 +247,6 @@ app.post('/api/chat-bot', async (req, res) => {
         res.status(500).json({ success: false, error: e.message });
     }
 });
-
 app.post('/api/agregar-stock', async (req, res) => {
     const { plataforma, correo, password, perfil, pin } = req.body;
     await supabase.from('CUENTAS').insert([{
