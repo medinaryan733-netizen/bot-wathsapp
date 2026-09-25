@@ -272,4 +272,15 @@ client.on('message', async msg => {
         console.error('Error al responder el mensaje:', error);
     }
 });
+client.on('ready', () => {
+    console.log('¡ALICE está 100% lista y conectada a WhatsApp!');
+});
+
+client.on('auth_failure', msg => {
+    console.error('Fallo de autenticación:', msg);
+});
+
+client.on('disconnected', (reason) => {
+    console.log('Cliente desconectado:', reason);
+});
 client.initialize();
