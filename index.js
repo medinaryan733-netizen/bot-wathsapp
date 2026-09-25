@@ -180,28 +180,53 @@ app.post('/api/guardar-cliente', async (req, res) => {
     res.json({ success: true });
 });
 
-// EDICIÓN COMPLETA DEL CLIENTE Y SU CUENTA
+// EDICIÓN COMPLETA Y SEGURA EN SUPABASE
 app.post('/api/editar-cliente-completo', async (req, res) => {
     const { originalTel, nuevoTel, nombre, cuentaId, plataforma, correo, password, perfil, pin, fecha_vencimiento } = req.body;
     try {
         const oldTelClean = cleanNumber(originalTel);
         const newTelClean = cleanNumber(nuevoTel);
 
+        // 1. Actualizar datos del cliente
         if (oldTelClean !== newTelClean) {
-            await supabase.from('CLIENTES').update({ telefono: newTelClean, nombre }).eq('telefono', oldTelClean);
-            await supabase.from('CUENTAS').update({ cliente_id: newTelClean }).eq('cliente_id', oldTelClean);
+            await supabase.from('CLIENTES').upsert({ telefono: newTelClean, nombre }, { onConflict: 'telefono' });
         } else {
             await supabase.from('CLIENTES').update({ nombre }).eq('telefono', oldTelClean);
         }
 
-        if (cuentaId) {
+        // 2. Actualizar o insertar datos de la cuenta
+        if (cuentaId && cuentaId !== '' && cuentaId !== 'null' && cuentaId !== 'undefined') {
             await supabase.from('CUENTAS').update({
-                plataforma, correo, password, perfil, pin, fecha_vencimiento
+                cliente_id: newTelClean,
+                plataforma,
+                correo: correo || '',
+                password: password || '',
+                perfil: perfil || '',
+                pin: pin || '',
+                fecha_vencimiento
             }).eq('id', cuentaId);
+        } else {
+            await supabase.from('CUENTAS').insert([{
+                cliente_id: newTelClean,
+                plataforma,
+                correo: correo || '',
+                password: password || '',
+                perfil: perfil || '',
+                pin: pin || '',
+                fecha_vencimiento,
+                estado: 'ocupado'
+            }]);
+        }
+
+        // 3. Si cambió el número de teléfono, limpiar el registro viejo
+        if (oldTelClean !== newTelClean) {
+            await supabase.from('CUENTAS').update({ cliente_id: newTelClean }).eq('cliente_id', oldTelClean);
+            await supabase.from('CLIENTES').delete().eq('telefono', oldTelClean);
         }
 
         res.json({ success: true });
     } catch (e) {
+        console.error('Error al editar cliente:', e.message);
         res.status(500).json({ success: false, error: e.message });
     }
 });
@@ -219,11 +244,10 @@ app.post('/api/enviar-mensaje-cliente', async (req, res) => {
     }
 });
 
-// CHAT DIRECTO CON ALICE DESDE EL PANEL (CON CONTEXTO DE BASE DE DATOS)
+// CHAT DIRECTO CON ALICE DESDE EL PANEL (CON ACCESO EN VIVO A LOS CLIENTES)
 app.post('/api/chat-bot', async (req, res) => {
     const { mensaje, historial } = req.body;
     try {
-        // Obtenemos clientes y cuentas en tiempo real desde Supabase
         const { data: clientes } = await supabase.from('CLIENTES').select('*, CUENTAS(*)');
         
         const listaResumen = clientes?.map(c => {
@@ -237,7 +261,7 @@ app.post('/api/chat-bot', async (req, res) => {
         const response = await client.messages.create({
             model: 'claude-sonnet-4-6',
             max_tokens: 600,
-            system: SYSTEM_PROMPT + `\n\n[INFO INTERNA DEL PANEL WEB]: Estás conversando directamente con RYAN (tu dueño). Tenés acceso a la lista actualizada de clientes en Supabase:\n\n${listaResumen}\n\nSi Ryan te pregunta por clientes, datos de ventas o vencimientos, usá esta lista para responderle con precisión.`,
+            system: SYSTEM_PROMPT + `\n\n[INFO INTERNA DEL PANEL WEB]: Estás conversando con RYAN (tu dueño). Tenés acceso en tiempo real a la lista de clientes cargados en Supabase:\n\n${listaResumen}\n\nSi Ryan te pregunta por clientes o vencimientos, respondé con esta información.`,
             messages: messagesFormatted
         });
 
@@ -247,6 +271,7 @@ app.post('/api/chat-bot', async (req, res) => {
         res.status(500).json({ success: false, error: e.message });
     }
 });
+
 app.post('/api/agregar-stock', async (req, res) => {
     const { plataforma, correo, password, perfil, pin } = req.body;
     await supabase.from('CUENTAS').insert([{
@@ -317,7 +342,6 @@ app.get('/', (req, res) => {
             .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 100; justify-content: center; align-items: center; }
             .modal-box { background: var(--card); padding: 25px; border-radius: 12px; max-width: 500px; width: 90%; border: 1px solid var(--border); }
 
-            /* CHAT BOX UI */
             .chat-container { display: flex; flex-direction: column; height: 400px; background: #0f172a; border-radius: 8px; border: 1px solid var(--border); padding: 15px; }
             .chat-messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
             .chat-msg { max-width: 80%; padding: 10px 14px; border-radius: 8px; font-size: 0.95rem; }
@@ -414,10 +438,10 @@ app.get('/', (req, res) => {
             <!-- TAB 4: CHAT DIRECTO CON ALICE & CONTROL BOT -->
             <div id="tabBot" class="tab-content">
                 <h3>💬 Hablar Directamente con ALICE</h3>
-                <p style="color:var(--muted); font-size:0.85rem; margin-bottom:10px;">Podés consultarle dudas o interactuar con ella sin necesidad de comandos.</p>
+                <p style="color:var(--muted); font-size:0.85rem; margin-bottom:10px;">Podés consultarle dudas o pedirle información sobre tus clientes.</p>
                 <div class="chat-container">
                     <div class="chat-messages" id="chatMessages">
-                        <div class="chat-msg bot">¡Hola Ryan! ¿En qué te ayudo hoy con el negocio o el bot? 😊</div>
+                        <div class="chat-msg bot">¡Hola Ryan! ¿En qué te ayudo hoy? Conozco tus clientes y servicios cargados. 😊</div>
                     </div>
                     <div class="chat-input-row">
                         <input type="text" id="chatInputText" placeholder="Escribí un mensaje para ALICE..." onkeydown="if(event.key==='Enter') sendWebChat()">
@@ -562,7 +586,7 @@ app.get('/', (req, res) => {
             function renderClientesTable(lista) {
                 const tbody = document.getElementById('tblClientes');
                 tbody.innerHTML = '';
-                lista.forEach(c => {
+                lista.forEach((c, index) => {
                     const cuenta = c.CUENTAS && c.CUENTAS.length > 0 ? c.CUENTAS[0] : {};
                     const mailPass = (cuenta.correo || cuenta.password) ? \`\${cuenta.correo || '-'} / \${cuenta.password || '-'} / P:\${cuenta.perfil || '-'} (PIN:\${cuenta.pin || '-'})\` : 'Sin datos';
                     tbody.innerHTML += \`
@@ -573,8 +597,8 @@ app.get('/', (req, res) => {
                             <td><small>\${mailPass}</small></td>
                             <td>\${cuenta.fecha_vencimiento || '-'}</td>
                             <td>
-                                <button class="btn-edit" onclick="openEditModal('\${c.telefono}', '\${c.nombre}', \${cuenta.id || null}, '\${cuenta.plataforma||''}', '\${cuenta.correo||''}', '\${cuenta.password||''}', '\${cuenta.perfil||''}', '\${cuenta.pin||''}', '\${cuenta.fecha_vencimiento||''}')">✏️ Editar</button>
-                                <button class="btn-msg" onclick="openMsgModal('\${c.telefono}', '\${c.nombre}')">💬 Mensaje</button>
+                                <button class="btn-edit" onclick="openEditModal(\${index})">✏️ Editar</button>
+                                <button class="btn-msg" onclick="openMsgModal(\${index})">💬 Mensaje</button>
                                 <button class="btn-danger" onclick="eliminarCliente('\${c.telefono}')">🗑️</button>
                             </td>
                         </tr>
@@ -608,18 +632,23 @@ app.get('/', (req, res) => {
                 renderClientesTable(filtered);
             }
 
-            // EDICIÓN COMPLETA DEL CLIENTE
-            function openEditModal(originalTel, nom, cuentaId, plat, mail, pass, perfil, pin, venc) {
-                document.getElementById('editOriginalTel').value = originalTel;
-                document.getElementById('editNom').value = nom;
-                document.getElementById('editTel').value = originalTel;
-                document.getElementById('editCuentaId').value = cuentaId || '';
-                document.getElementById('editPlat').value = plat;
-                document.getElementById('editMail').value = mail;
-                document.getElementById('editPass').value = pass;
-                document.getElementById('editPerfil').value = perfil;
-                document.getElementById('editPin').value = pin;
-                document.getElementById('editVenc').value = venc;
+            // EDICIÓN SEGURA POR ÍNDICE
+            function openEditModal(index) {
+                const clientObj = localClientes[index];
+                if (!clientObj) return;
+                const cuenta = (clientObj.CUENTAS && clientObj.CUENTAS.length > 0) ? clientObj.CUENTAS[0] : {};
+
+                document.getElementById('editOriginalTel').value = clientObj.telefono || '';
+                document.getElementById('editNom').value = clientObj.nombre || '';
+                document.getElementById('editTel').value = clientObj.telefono || '';
+                document.getElementById('editCuentaId').value = cuenta.id || '';
+                document.getElementById('editPlat').value = cuenta.plataforma || '';
+                document.getElementById('editMail').value = cuenta.correo || '';
+                document.getElementById('editPass').value = cuenta.password || '';
+                document.getElementById('editPerfil').value = cuenta.perfil || '';
+                document.getElementById('editPin').value = cuenta.pin || '';
+                document.getElementById('editVenc').value = cuenta.fecha_vencimiento || '';
+                
                 document.getElementById('editModal').style.display = 'flex';
             }
 
@@ -639,21 +668,31 @@ app.get('/', (req, res) => {
                     fecha_vencimiento: document.getElementById('editVenc').value
                 };
 
-                await fetch('/api/editar-cliente-completo', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(body)
-                });
+                try {
+                    const res = await fetch('/api/editar-cliente-completo', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(body)
+                    });
+                    const data = await res.json();
 
-                closeEditModal();
-                alert('✅ Datos del cliente actualizados');
-                loadDashboardData();
+                    if (res.ok && data.success) {
+                        closeEditModal();
+                        alert('✅ Datos del cliente actualizados');
+                        loadDashboardData();
+                    } else {
+                        alert('❌ Error al guardar: ' + (data.error || 'Ocurrió un problema'));
+                    }
+                } catch(e) {
+                    alert('❌ Error de conexión: ' + e.message);
+                }
             }
 
-            // ENVIAR MENSAJE DIRECTO
-            function openMsgModal(tel, nombre) {
-                document.getElementById('msgTelTarget').value = tel;
-                document.getElementById('lblMsgDestinatario').textContent = \`Para: \${nombre} (+\${tel})\`;
+            function openMsgModal(index) {
+                const clientObj = localClientes[index];
+                if (!clientObj) return;
+                document.getElementById('msgTelTarget').value = clientObj.telefono;
+                document.getElementById('lblMsgDestinatario').textContent = \`Para: \${clientObj.nombre} (+\${clientObj.telefono})\`;
                 document.getElementById('txtMsgContent').value = '';
                 document.getElementById('msgModal').style.display = 'flex';
             }
@@ -679,7 +718,6 @@ app.get('/', (req, res) => {
                 }
             }
 
-            // CHAT WEB DIRECTO CON ALICE
             async function sendWebChat() {
                 const input = document.getElementById('chatInputText');
                 const text = input.value.trim();
