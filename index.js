@@ -275,7 +275,6 @@ client.initialize();
 // ==========================================
 // 5. INICIAR EL SERVIDOR EXPRESS (AL FINAL)
 // ==========================================
-const PORT = process.env.PORT || 3000;
 app.listen(PORT, function() {
     console.log(`🚀 Servidor Web y Panel funcionando en el puerto ${PORT}`);
 });
