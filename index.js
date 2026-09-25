@@ -122,13 +122,9 @@ async function checkVencimientos() {
 }
 setInterval(checkVencimientos, 24 * 60 * 60 * 1000);
 
-// HELPER PARA COMBINAR CLIENTES, CUENTAS Y SERVICIOS CON PIN Y CHANCES
 async function fetchFullClientes() {
     const { data: clientes, error: errCli } = await supabase.from('CLIENTES').select('*, CUENTAS(*), SERVICIOS(*)').order('id', { ascending: true });
-    if (errCli) {
-        console.error('Error al traer clientes:', errCli.message);
-        return [];
-    }
+    if (errCli) return [];
 
     return (clientes || []).map(c => {
         const ctas = c.CUENTAS || [];
@@ -181,7 +177,7 @@ app.get('/api/dashboard-data', async (req, res) => {
         const { data: cuentas } = await supabase.from('CUENTAS').select('*');
         
         const totalClientes = fullClientes.length;
-        const stockDisponible = cuentas?.filter(c => c.estado === 'disponible').length || 0;
+        const stockDisponible = cuentas?.filter(c => String(c.estado).toLowerCase() === 'disponible').length || 0;
         const cuentasOcupadas = fullClientes.filter(c => c.cuenta.plataforma !== '').length;
         
         const hoy = new Date();
@@ -275,8 +271,6 @@ app.post('/api/guardar-cliente', async (req, res) => {
 
 app.post('/api/editar-cliente-completo', async (req, res) => {
     const { clientId, nuevoTel, nombre, plataforma, correo, clave, password, perfil, pin, fecha_vencimiento, chances } = req.body;
-    console.log('📝 Guardando cambios de cliente ID:', clientId, 'PIN:', pin);
-
     try {
         const idNum = Number(clientId);
         const telClean = cleanNumber(nuevoTel);
@@ -284,8 +278,7 @@ app.post('/api/editar-cliente-completo', async (req, res) => {
         const dateClean = (fecha_vencimiento && String(fecha_vencimiento).trim() !== '') ? fecha_vencimiento : null;
         const numChances = Number(chances || 0);
 
-        const { error: errCli } = await supabase.from('CLIENTES').update({ nombre, telefono: telClean, chances: numChances }).eq('id', idNum);
-        if (errCli) throw new Error('Error en CLIENTES: ' + errCli.message);
+        await supabase.from('CLIENTES').update({ nombre, telefono: telClean, chances: numChances }).eq('id', idNum);
 
         const ctaData = {
             cliente_id: idNum,
@@ -326,10 +319,9 @@ app.post('/api/editar-cliente-completo', async (req, res) => {
             await supabase.from('SERVICIOS').insert([svcData]);
         }
 
-        console.log('✅ Cliente y PIN guardados en Supabase:', idNum);
         res.json({ success: true });
     } catch (e) {
-        console.error('❌ Error en /api/editar-cliente-completo:', e.message);
+        console.error('Error en /api/editar-cliente-completo:', e.message);
         res.status(500).json({ success: false, error: e.message });
     }
 });
@@ -350,10 +342,7 @@ app.post('/api/chat-bot', async (req, res) => {
     const { mensaje, historial } = req.body;
     try {
         const fullClientes = await fetchFullClientes();
-        
-        const listaResumen = fullClientes.map(c => {
-            return `• ${c.nombre} (+${c.telefono}) | Servicio: ${c.cuenta.plataforma || 'Sin asignación'} | Correo: ${c.cuenta.correo || '-'} | PIN: ${c.cuenta.pin || '-'} | Chances Sorteo: ${c.chances} | Vence: ${c.cuenta.fecha_vencimiento || 'N/A'}`;
-        }).join('\n') || 'No hay clientes registrados actualmente.';
+        const listaResumen = fullClientes.map(c => `• ${c.nombre} (+${c.telefono}) | Servicio: ${c.cuenta.plataforma || 'Sin asignación'} | Correo: ${c.cuenta.correo || '-'} | PIN: ${c.cuenta.pin || '-'} | Chances: ${c.chances} | Vence: ${c.cuenta.fecha_vencimiento || 'N/A'}`).join('\n') || 'No hay clientes.';
 
         const messagesFormatted = (historial || []).map(m => ({ role: m.role, content: m.content }));
         messagesFormatted.push({ role: 'user', content: mensaje });
@@ -361,12 +350,11 @@ app.post('/api/chat-bot', async (req, res) => {
         const response = await client.messages.create({
             model: 'claude-sonnet-4-6',
             max_tokens: 600,
-            system: SYSTEM_PROMPT + `\n\n[INFO INTERNA DEL PANEL WEB]: Estás conversando con RYAN (tu dueño). Tenés acceso en tiempo real a la lista de clientes cargados en Supabase:\n\n${listaResumen}\n\nSi Ryan te pregunta por clientes, chances de sorteo o vencimientos, respondé con esta información exacta.`,
+            system: SYSTEM_PROMPT + `\n\n[INFO INTERNA DEL PANEL WEB]: Estás conversando con RYAN (tu dueño). Tenés acceso a la lista de clientes:\n\n${listaResumen}`,
             messages: messagesFormatted
         });
 
-        const botReply = response.content[0].text;
-        res.json({ success: true, reply: botReply });
+        res.json({ success: true, reply: response.content[0].text });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
@@ -376,7 +364,12 @@ app.post('/api/agregar-stock', async (req, res) => {
     const { plataforma, correo, clave, password, perfil, pin } = req.body;
     const passValue = clave || password || '';
     await supabase.from('CUENTAS').insert([{
-        plataforma, correo, clave: passValue, perfil: perfil || '', pin: pin || '', estado: 'disponible'
+        plataforma: plataforma || 'General',
+        correo,
+        clave: passValue,
+        perfil: perfil || '',
+        pin: pin || '',
+        estado: 'disponible'
     }]);
     res.json({ success: true });
 });
@@ -442,9 +435,10 @@ app.get('/', (req, res) => {
             button.btn-edit { background: #3b82f6; color: #fff; border: none; cursor: pointer; padding: 6px 12px; width: auto; border-radius: 4px; margin-right: 5px; }
             button.btn-msg { background: #8b5cf6; color: #fff; border: none; cursor: pointer; padding: 6px 12px; width: auto; border-radius: 4px; margin-right: 5px; }
 
-            table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 15px; margin-bottom: 25px; }
             th, td { padding: 12px; text-align: left; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
             th { background: #0f172a; color: var(--accent); }
+            h4.stock-section-title { color: var(--accent); margin-top: 20px; margin-bottom: 5px; border-left: 4px solid var(--accent); padding-left: 10px; }
 
             .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 100; justify-content: center; align-items: center; }
             .modal-box { background: var(--card); padding: 25px; border-radius: 12px; max-width: 500px; width: 90%; border: 1px solid var(--border); }
@@ -506,7 +500,7 @@ app.get('/', (req, res) => {
                             <th>Teléfono</th>
                             <th>Servicio</th>
                             <th>Correo / Clave / Perfil / PIN</th>
-                            <th>Chances Sorteo 🎟️</th>
+                            <th>Chances 🎟️</th>
                             <th>Vencimiento</th>
                             <th>Acciones</th>
                         </tr>
@@ -515,11 +509,11 @@ app.get('/', (req, res) => {
                 </table>
             </div>
 
-            <!-- TAB 3: STOCK CUENTAS -->
+            <!-- TAB 3: STOCK CUENTAS SEPARADO POR SERVICIOS -->
             <div id="tabStock" class="tab-content">
                 <h3>Cargar Nueva Cuenta al Stock Disponible</h3>
                 <form id="formCargarStock" style="margin-bottom:25px;">
-                    <input type="text" id="stkPlataforma" placeholder="Plataforma (Ej: Netflix, Disney+)" required>
+                    <input type="text" id="stkPlataforma" placeholder="Plataforma (Ej: Netflix, Disney+, Max)" required>
                     <input type="text" id="stkCorreo" placeholder="Correo electrónico" required>
                     <input type="text" id="stkPass" placeholder="Contraseña / Clave" required>
                     <input type="text" id="stkPerfil" placeholder="Perfil (Opcional)">
@@ -527,19 +521,8 @@ app.get('/', (req, res) => {
                     <button type="submit" class="btn-primary">Guardar en Stock</button>
                 </form>
 
-                <h3>Inventario de Cuentas Cargadas</h3>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Plataforma</th>
-                            <th>Correo / Clave</th>
-                            <th>Perfil / PIN</th>
-                            <th>Estado</th>
-                            <th>Asignado a</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tblStock"></tbody>
-                </table>
+                <h3 style="margin-top:20px;">📦 Inventario Organizado por Servicios</h3>
+                <div id="contenedorStockPorServicio"></div>
             </div>
 
             <!-- TAB 4: CHAT DIRECTO CON ALICE & CONTROL BOT -->
@@ -548,7 +531,7 @@ app.get('/', (req, res) => {
                 <p style="color:var(--muted); font-size:0.85rem; margin-bottom:10px;">Podés consultarle dudas o pedirle información sobre tus clientes y chances de sorteo.</p>
                 <div class="chat-container">
                     <div class="chat-messages" id="chatMessages">
-                        <div class="chat-msg bot">¡Hola Ryan! ¿En qué te ayudo hoy? Conozco tus clientes y chances de sorteo. 😊</div>
+                        <div class="chat-msg bot">¡Hola Ryan! ¿En qué te ayudo hoy? Conozco tus clientes y stock. 😊</div>
                     </div>
                     <div class="chat-input-row">
                         <input type="text" id="chatInputText" placeholder="Escribí un mensaje para ALICE..." onkeydown="if(event.key==='Enter') sendWebChat()">
@@ -578,7 +561,7 @@ app.get('/', (req, res) => {
                     <input type="text" id="addPlat" placeholder="Servicio (Ej: Netflix Perfil Extra)" required>
                     <input type="date" id="addVenc" required>
                     <input type="text" id="addMail" placeholder="Correo asignado (Opcional)">
-                    <input type="text" id="addPass" placeholder="Contraseña / Clave asignada (Opcional)">
+                    <input type="text" id="addPass" placeholder="Contraseña asignada (Opcional)">
                     <input type="text" id="addPerfil" placeholder="Perfil asignado (Opcional)">
                     <input type="text" id="addPin" placeholder="PIN asignado (Opcional)">
                     <input type="number" id="addChances" placeholder="Chances para el sorteo (Por defecto: 1)" value="1">
@@ -602,7 +585,7 @@ app.get('/', (req, res) => {
                 <label style="font-size:0.8rem; color:var(--muted);">Correo:</label>
                 <input type="text" id="editMail" placeholder="Correo">
                 <label style="font-size:0.8rem; color:var(--muted);">Contraseña / Clave:</label>
-                <input type="text" id="editPass" placeholder="Contraseña / Clave">
+                <input type="text" id="editPass" placeholder="Contraseña">
                 <label style="font-size:0.8rem; color:var(--muted);">Perfil y PIN:</label>
                 <div style="display:flex; gap:10px;">
                     <input type="text" id="editPerfil" placeholder="Perfil">
@@ -689,7 +672,7 @@ app.get('/', (req, res) => {
                 localCuentas = data.stockCuentas;
 
                 renderClientesTable(localClientes);
-                renderStockTable(localCuentas);
+                renderStockPorServicios(localCuentas);
             }
 
             function renderClientesTable(lista) {
@@ -718,20 +701,49 @@ app.get('/', (req, res) => {
                 });
             }
 
-            function renderStockTable(lista) {
-                const tbody = document.getElementById('tblStock');
-                tbody.innerHTML = '';
+            // RENDERIZAR STOCK SEPARADO POR PLATAFORMAS
+            function renderStockPorServicios(lista) {
+                const contenedor = document.getElementById('contenedorStockPorServicio');
+                contenedor.innerHTML = '';
+
+                // Agrupar por plataforma
+                const grupos = {};
                 lista.forEach(s => {
-                    tbody.innerHTML += \`
+                    const plat = (s.plataforma || 'General').trim();
+                    if (!grupos[plat]) grupos[plat] = [];
+                    grupos[plat].push(s);
+                });
+
+                if (Object.keys(grupos).length === 0) {
+                    contenedor.innerHTML = '<p style="color:var(--muted); padding:10px;">No hay cuentas en el inventario.</p>';
+                    return;
+                }
+
+                for (const [plat, cuentas] of Object.entries(grupos)) {
+                    let rowsHtml = cuentas.map(s => \`
                         <tr>
-                            <td><strong>\${s.plataforma}</strong></td>
                             <td>\${s.correo} / \${s.clave || '-'}</td>
                             <td>Perfil: \${s.perfil || '-'} / PIN: \${s.pin || '-'}</td>
-                            <td>\${s.estado === 'disponible' ? '🟢 Disponible' : '🔴 Ocupado'}</td>
-                            <td>\${s.cliente_id ? 'ID: ' + s.cliente_id : 'N/A'}</td>
+                            <td>\${String(s.estado).toLowerCase() === 'disponible' ? '🟢 Disponible' : '🔴 Ocupado'}</td>
+                            <td>\${s.cliente_id ? 'Asignado (ID: ' + s.cliente_id + ')' : 'Libre'}</td>
                         </tr>
+                    \`).join('');
+
+                    contenedor.innerHTML += \`
+                        <h4 class="stock-section-title">📺 \${plat} (\${cuentas.length} cuentas)</h4>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Correo / Clave</th>
+                                    <th>Perfil / PIN</th>
+                                    <th>Estado</th>
+                                    <th>Asignado a</th>
+                                </tr>
+                            </thead>
+                            <tbody>\${rowsHtml}</tbody>
+                        </table>
                     \`;
-                });
+                }
             }
 
             function filterClientes() {
@@ -875,7 +887,7 @@ app.get('/', (req, res) => {
                     chances: document.getElementById('addChances').value
                 };
                 await fetch('/api/guardar-cliente', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-                alert('✅ Cliente registrado en Supabase con sus chances');
+                alert('✅ Cliente registrado en Supabase');
                 document.getElementById('formAddClient').reset();
                 loadDashboardData();
             });
