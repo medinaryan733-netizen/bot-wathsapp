@@ -23,7 +23,6 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 // ==========================================
 // 1. CONFIGURACIONES Y CREDENCIALES
 // ==========================================
-const app = express();
 app.use(cors());
 app.use(express.json()); // Para poder leer JSON en el body
 
