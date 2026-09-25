@@ -1,3 +1,18 @@
+// --- 1. INICIO DEL SERVIDOR HTTP (OBLIGATORIO PARA RENDER) ---
+const express = require('express');
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+    res.send('ALICE está activa y operando.');
+});
+
+app.listen(PORT, () => {
+    console.log(`Servidor web corriendo en el puerto ${PORT}`);
+});
+
+// --- 2. AQUÍ DEBAJO VA TODO LO DEMÁS QUE YA TENÍAS ---
+// (Por ejemplo: la importación de Client, LocalAuth, la configuración de Puppeteer, etc.)
 const express = require('express');
 const cors = require('cors');
 const { Client, LocalAuth } = require('whatsapp-web.js');
