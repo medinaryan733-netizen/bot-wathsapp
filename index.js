@@ -15,7 +15,7 @@ const PORT = process.env.PORT || 10000;
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'NEXXUS_ALICE_SECRET';
-const OWNER_PHONE = (process.env.OWNER_PHONE || '').replace('+', '').replace('whatsapp:', '');
+const OWNER_PHONE = process.env.OWNER_PHONE || '';
 
 // INICIALIZAR ANTHROPIC Y SUPABASE
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -25,12 +25,36 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
 const pausedChats = {};
 let promoActiva = null;
 
+// Helper para comparar teléfonos sin importar el formato (+54, 549, etc)
+function cleanNumber(num) {
+    return String(num || '').replace(/\D/g, '');
+}
+
+function checkIsOwner(phone) {
+    const ownerClean = cleanNumber(OWNER_PHONE);
+    const phoneClean = cleanNumber(phone);
+    if (!ownerClean || !phoneClean) return false;
+    // Compara si coinciden o si comparten los últimos 8 dígitos
+    return phoneClean === ownerClean || 
+           phoneClean.endsWith(ownerClean.slice(-8)) || 
+           ownerClean.endsWith(phoneClean.slice(-8));
+}
+
 // ==========================================
 // PROMPT DEL SISTEMA (ALICE)
 // ==========================================
 const SYSTEM_PROMPT = `Sos ALICE, la asistente virtual de NEXXUS, un negocio de entretenimiento digital. Respondés en español rioplatense, sos amable, profesional y resolutiva. Mensajes cortos y claros, usás emojis con moderación.
 
-SERVICIOS Y PRECIOS: Netflix Perfil $9000/mes. Netflix perfil extra $14000/mes (perfil propio, no comparte con otros, sin problemas de hogar). Max $4500/mes. Prime Video $4000/mes. Disney+ $6000/mes. Crunchyroll $2800/mes. Reels Shorts $7500/mes. YouTube Premium $2800/mes. TV Digital pack futbol: 1)Cenit TV $7000/mes 2)TV Online Plus $10000/mes 3)Argentum $12000/mes (incluye YT Premium, Spotify, YT Music) 4)TV Sin Limites $14000/mes.
+SERVICIOS Y PRECIOS:
+- Netflix Perfil $9000/mes.
+- Netflix perfil extra $14000/mes (perfil propio, no comparte con otros, sin problemas de hogar).
+- Max $4500/mes.
+- Prime Video $4000/mes.
+- Disney+ $6000/mes.
+- Crunchyroll $2800/mes.
+- Reels Shorts $7500/mes.
+- YouTube Premium $2800/mes.
+- TV Digital pack futbol: 1) Cenit TV $7000/mes 2) TV Online Plus $10000/mes 3) Argentum $12000/mes (incluye YT Premium, Spotify, YT Music) 4) TV Sin Limites $14000/mes.
 
 MEDIOS DE PAGO: Transferencia alias RYAN.MB (Braian Gaston Medina) o efectivo.
 
@@ -38,8 +62,11 @@ SORTEO Y GRUPO: Sorteamos 8 plataformas cada 01 del mes. Para participar deben c
 
 GUIA TV DIGITAL: Para SMART TV ANDROID/FIRE STICK: 1) App Downloader (naranja) 2) Enter URL y el código 3) Instalar. CÓDIGOS TV: Cenit 7960580, TV Online Plus 3342117, Argentum 4708062, TV Sin Limites 2630214 o 4540617.
 
-REGLAS DE ATENCIÓN:
-- CLIENTE NUEVO (Pregunta por precios/promos): Solo ofrece el catálogo, no pidas datos de cuentas, correos o perfiles porque aún no tienen servicio.
+REGLAS DE ATENCIÓN Y PROMOCIONES:
+- CONSULTA DE PROMOCIONES: Si el cliente pregunta por promociones, ofertas o descuentos:
+  * Si NO hay promo activa actualmente (indicado en el contexto), NO vuelvas a mandar la lista completa de precios si ya la diste. Responde de forma corta y amable: "Por el momento no tenemos promociones activas vigentes, pero nuestros precios son los más accesibles del mercado. ¡Recordá que con tu compra participás del sorteo mensual!"
+  * Si HAY promo activa, menciónala con claridad.
+- CLIENTE NUEVO: Ofrécele el catálogo de forma limpia. No pidas datos de cuentas, correos o perfiles porque aún no tienen servicio.
 - SOPORTE TÉCNICO (Cliente con problema): Intenta resolver básicos (ej: guías de TV, escaneo de QR). Si faltan datos en el sistema y el cliente tiene un problema, pídele amablemente su nombre, correo, clave y perfil para que Ryan lo revise más rápido.
 - NETFLIX HOGAR: Explica con empatía que a Netflix le conviene que cada casa pague lo suyo, por eso los bloqueos. Dile que ya avisaste a Ryan.
 - AUDIOS Y LLAMADAS: Pide amablemente que te escriban en texto.
@@ -62,9 +89,10 @@ async function sendWhatsAppMessage(to, text) {
 }
 
 async function notifyOwner(clientPhone, issue) {
-    if (!OWNER_PHONE) return;
+    const ownerClean = cleanNumber(OWNER_PHONE);
+    if (!ownerClean) return;
     const msg = `⚠️ *ALERTA NEXXUS*\n\n👤 Cliente: +${clientPhone}\n📝 Situación: ${issue}`;
-    await sendWhatsAppMessage(OWNER_PHONE, msg);
+    await sendWhatsAppMessage(ownerClean, msg);
 }
 
 // ==========================================
@@ -102,8 +130,7 @@ setInterval(checkVencimientos, 24 * 60 * 60 * 1000);
 // PANEL WEB (FRONTEND Y BACKEND)
 // ==========================================
 app.get('/', async (req, res) => {
-    // Consulta a Supabase para mostrar en el panel
-    const { data: clients, error } = await supabase.from('CLIENTES').select('*, CUENTAS(*)');
+    const { data: clients } = await supabase.from('CLIENTES').select('*, CUENTAS(*)');
     const clientesLista = clients || [];
 
     const rows = clientesLista.map(c => {
@@ -148,7 +175,6 @@ app.get('/', async (req, res) => {
             <tbody>${rows || '<tr><td colspan="3">Sin clientes</td></tr>'}</tbody></table>
         </div>
         <script>
-            // Lógica frontend enviando datos al backend
             document.getElementById('formAgregarCliente').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const btn = document.getElementById('btnGuardar');
@@ -174,7 +200,6 @@ app.get('/', async (req, res) => {
     res.send(html);
 });
 
-// Endpoint que recibe el formulario del Panel Web y guarda en Supabase
 app.post('/api/agregar-panel', async (req, res) => {
     const { telefono, nombre, plataforma, fecha_vencimiento } = req.body;
     await supabase.from('CLIENTES').upsert({ telefono, nombre }, { onConflict: 'telefono' });
@@ -206,80 +231,177 @@ app.post('/webhook', async (req, res) => {
         const from = message.from;
         const pushName = body.entry?.[0]?.changes?.[0]?.value?.contacts?.[0]?.profile?.name || 'Cliente';
         const type = message.type;
-        const isOwner = from === OWNER_PHONE || from.includes(OWNER_PHONE);
+        const isOwner = checkIsOwner(from);
 
         const textMessage = type === 'text' ? message.text.body : '';
 
-        // 1. MANEJO DE COMANDOS DEL DUEÑO
+        // =========================================================
+        // 1. MANEJO DE COMANDOS DEL DUEÑO (EJECUCIÓN DIRECTA)
+        // =========================================================
         if (isOwner && type === 'text') {
-            const msgCmd = textMessage.trim();
-            const lowerCmd = msgCmd.toLowerCase();
+            const rawMsg = textMessage.trim();
+            const lowerCmd = rawMsg.toLowerCase();
 
+            // AYUDA
             if (lowerCmd === '!ayuda' || lowerCmd === '!comandos') {
-                const ayuda = `🛠️ *Panel Admin NEXXUS:*\n!ayuda\n!historial [num]\n!resp [num] [msj]\n!agregar [tel] | [nom] | [serv] | [aaaa-mm-dd]\n!dar [num] [plataformas]\nPAUSA [num] / ACTIVAR [num]\nMSG [num] [msj]\nPROMO ACTIVA [texto] / PROMO OFF\nNUEVO CLIENTE [nom] [tel] [serv]`;
-                return await sendWhatsAppMessage(from, ayuda);
+                const ayuda = `🛠️ *Panel Admin NEXXUS:*\n\n` +
+                    `🔹 *!dar [teléfono] [datos o plataforma]*: Envía acceso al cliente.\n` +
+                    `🔹 *!agregar [tel] | [nombre] | [servicio] | [aaaa-mm-dd]*: Registra servicio.\n` +
+                    `🔹 *!historial [tel]*: Muestra últimos mensajes.\n` +
+                    `🔹 *!resp [tel] [mensaje]*: Responde directo al cliente.\n` +
+                    `🔹 *PAUSA [tel]* / *ACTIVAR [tel]*: Controla el bot.\n` +
+                    `🔹 *PAUSA TODOS* / *ACTIVAR TODOS*: Pausa global.\n` +
+                    `🔹 *PROMO ACTIVA [texto]* / *PROMO OFF*: Promociones.`;
+                await sendWhatsAppMessage(from, ayuda);
+                return;
             }
+
+            // COMANDO !DAR (SOPORTA MULTILÍNEA O STOCK AUTOMÁTICO)
+            if (lowerCmd.startsWith('!dar')) {
+                const firstLine = rawMsg.split('\n')[0];
+                const parts = firstLine.split(' ');
+                const targetPhone = parts[1] ? cleanNumber(parts[1]) : null;
+
+                if (!targetPhone) {
+                    await sendWhatsAppMessage(from, "❌ Falta el número de teléfono. Uso: !dar [número] [detalles]");
+                    return;
+                }
+
+                // Extrae el resto del texto (incluyendo saltos de línea)
+                const restOfMessage = rawMsg.substring(rawMsg.indexOf(parts[1]) + parts[1].length).trim();
+
+                // Si escribiste los datos a mano (como en la captura):
+                if (restOfMessage.includes('\n') || restOfMessage.toLowerCase().includes('correo') || restOfMessage.toLowerCase().includes('contraseña')) {
+                    const mensajeEnviar = `🎉 *¡Tus datos de acceso de NEXXUS!* 🎉\n\n${restOfMessage}\n\n⚠️ *Importante:* No modifiques los datos de las cuentas para evitar bloqueos. ¡Gracias por elegirnos! - NEXXUS`;
+                    await sendWhatsAppMessage(targetPhone, mensajeEnviar);
+                    await sendWhatsAppMessage(from, `✅ Acceso enviado con éxito al cliente +${targetPhone}`);
+                    return;
+                } 
+                // Si pides buscar en stock de Supabase por nombre de plataforma:
+                else {
+                    const plataformaBuscada = restOfMessage || 'General';
+                    const { data: cuentaData } = await supabase
+                        .from('CUENTAS')
+                        .select('*')
+                        .ilike('plataforma', `%${plataformaBuscada}%`)
+                        .eq('estado', 'disponible')
+                        .limit(1)
+                        .single();
+
+                    if (!cuentaData) {
+                        await sendWhatsAppMessage(from, `❌ No hay stock disponible de ${plataformaBuscada} en Supabase.`);
+                        return;
+                    }
+
+                    let msgCliente = `🎉 *¡Tus datos de acceso de NEXXUS!* 🎉\n\n📺 *Plataforma:* ${cuentaData.plataforma}\n📧 *Correo:* ${cuentaData.correo}\n🔑 *Contraseña:* ${cuentaData.password}`;
+                    if (cuentaData.perfil) msgCliente += `\n👤 *Perfil:* ${cuentaData.perfil}`;
+                    if (cuentaData.pin) msgCliente += `\n🔢 *PIN:* ${cuentaData.pin}`;
+                    msgCliente += `\n\n⚠️ *Importante:* No modifiques los datos. ¡Gracias por elegirnos! - NEXXUS`;
+
+                    await supabase.from('CUENTAS').update({ estado: 'ocupado', cliente_id: targetPhone }).eq('id', cuentaData.id);
+                    await sendWhatsAppMessage(targetPhone, msgCliente);
+                    await sendWhatsAppMessage(from, `✅ Cuenta de ${cuentaData.plataforma} entregada desde Supabase a +${targetPhone}`);
+                    return;
+                }
+            }
+
+            // COMANDO !AGREGAR
+            if (lowerCmd.startsWith('!agregar ')) {
+                const partes = rawMsg.replace('!agregar', '').trim().split('|');
+                if (partes.length >= 4) {
+                    const tel = cleanNumber(partes[0]);
+                    const nom = partes[1].trim();
+                    const serv = partes[2].trim();
+                    const fec = partes[3].trim();
+
+                    await supabase.from('CLIENTES').upsert({ telefono: tel, nombre: nom }, { onConflict: 'telefono' });
+                    await supabase.from('CUENTAS').insert([{ cliente_id: tel, plataforma: serv, fecha_vencimiento: fec, estado: 'ocupado' }]);
+                    await sendWhatsAppMessage(from, `✅ Cliente cargado en Supabase:\n👤 ${nom}\n📱 +${tel}\n📦 ${serv}\n📅 Vence: ${fec}`);
+                } else {
+                    await sendWhatsAppMessage(from, "⚠️ Uso correcto: !agregar teléfono | nombre | servicio | aaaa-mm-dd");
+                }
+                return;
+            }
+
+            // HISTORIAL
             if (lowerCmd.startsWith('!historial ')) {
-                const num = msgCmd.split(' ')[1];
+                const num = cleanNumber(rawMsg.split(' ')[1]);
                 const { data: logs } = await supabase.from('messages').select('*').eq('phone', num).order('created_at', { ascending: false }).limit(10);
-                const txt = logs?.length ? `📜 *Historial +${num}:*\n` + logs.reverse().map(m => `• *${m.role}:* ${m.content}`).join('\n') : `Sin datos para ${num}`;
-                return await sendWhatsAppMessage(from, txt);
+                const txt = logs?.length ? `📜 *Historial +${num}:*\n` + logs.reverse().map(m => `• *${m.role}:* ${m.content}`).join('\n') : `Sin datos para +${num}`;
+                await sendWhatsAppMessage(from, txt);
+                return;
             }
+
+            // RESPONDER DIRECTO
             if (lowerCmd.startsWith('!resp ')) {
-                const parts = msgCmd.split(' ');
-                await sendWhatsAppMessage(parts[1], parts.slice(2).join(' '));
-                return await sendWhatsAppMessage(from, `✅ Respondido a ${parts[1]}`);
+                const parts = rawMsg.split(' ');
+                const targetPhone = cleanNumber(parts[1]);
+                const textToSend = parts.slice(2).join(' ');
+                await sendWhatsAppMessage(targetPhone, textToSend);
+                await sendWhatsAppMessage(from, `✅ Mensaje enviado a +${targetPhone}`);
+                return;
             }
-            if (msgCmd.startsWith('PAUSA TODOS')) { pausedChats['TODOS'] = true; return await sendWhatsAppMessage(from, 'Bot pausado para TODOS.'); }
-            if (msgCmd.startsWith('ACTIVAR TODOS')) { pausedChats['TODOS'] = false; return await sendWhatsAppMessage(from, 'Bot reactivado para TODOS.'); }
-            if (msgCmd.startsWith('PAUSA ')) { pausedChats[msgCmd.split(' ')[1]] = true; return await sendWhatsAppMessage(from, 'Pausado para ' + msgCmd.split(' ')[1]); }
-            if (msgCmd.startsWith('ACTIVAR ')) { pausedChats[msgCmd.split(' ')[1]] = false; return await sendWhatsAppMessage(from, 'Activado para ' + msgCmd.split(' ')[1]); }
-            if (msgCmd.startsWith('PROMO ACTIVA ')) { promoActiva = msgCmd.replace('PROMO ACTIVA ', ''); return await sendWhatsAppMessage(from, 'Promo global activada.'); }
-            if (msgCmd === 'PROMO OFF') { promoActiva = null; return await sendWhatsAppMessage(from, 'Promo global desactivada.'); }
-            
-            // ... (Puedes seguir usando el resto de comandos aquí directamente a la API)
+
+            // CONTROLES DE PAUSA Y PROMO
+            if (rawMsg === 'PAUSA TODOS') { pausedChats['TODOS'] = true; await sendWhatsAppMessage(from, 'Bot pausado para TODOS.'); return; }
+            if (rawMsg === 'ACTIVAR TODOS') { pausedChats['TODOS'] = false; await sendWhatsAppMessage(from, 'Bot reactivado para TODOS.'); return; }
+            if (rawMsg.startsWith('PAUSA ')) { const p = cleanNumber(rawMsg.split(' ')[1]); pausedChats[p] = true; await sendWhatsAppMessage(from, `Pausado para +${p}`); return; }
+            if (rawMsg.startsWith('ACTIVAR ')) { const p = cleanNumber(rawMsg.split(' ')[1]); pausedChats[p] = false; await sendWhatsAppMessage(from, `Activado para +${p}`); return; }
+            if (rawMsg.startsWith('PROMO ACTIVA ')) { promoActiva = rawMsg.replace('PROMO ACTIVA ', ''); await sendWhatsAppMessage(from, 'Promo global activada.'); return; }
+            if (rawMsg === 'PROMO OFF') { promoActiva = null; await sendWhatsAppMessage(from, 'Promo global desactivada.'); return; }
         }
 
         // SI EL BOT ESTÁ PAUSADO, NO RESPONDER
         if (pausedChats['TODOS'] || pausedChats[from]) return;
 
+        // =========================================================
         // 2. MANEJO DE IMÁGENES / COMPROBANTES (CLIENTE)
+        // =========================================================
         if (type === 'image') {
             const mediaId = message.image.id;
             const caption = message.image.caption || '';
+            const ownerClean = cleanNumber(OWNER_PHONE);
             
-            // Reenvía automáticamente a ti
-            if (OWNER_PHONE) {
+            if (ownerClean) {
                 await axios.post(
                     `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
-                    { messaging_product: 'whatsapp', to: OWNER_PHONE, type: 'image', image: { id: mediaId, caption: `📷 *Cliente:* ${pushName}\n📞 *Teléfono:* +${from}\n💬 *Nota:* ${caption}` } },
+                    { messaging_product: 'whatsapp', to: ownerClean, type: 'image', image: { id: mediaId, caption: `📷 *Comprobante/Imagen recibida*\n👤 *Cliente:* ${pushName}\n📞 *Teléfono:* +${from}\n💬 *Nota:* ${caption}` } },
                     { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, 'Content-Type': 'application/json' } }
                 );
             }
             
-            // Guarda la interacción
             await supabase.from('messages').insert([{ phone: from, role: 'user', content: '[Envío de Imagen/Comprobante]' }]);
-            
-            // Responde al cliente proactivamente
-            await sendWhatsAppMessage(from, "📲 Recibí tu imagen correctamente. Ryan la está revisando ahora mismo. \n\nSi es por un problema técnico y aún no me pasaste los datos, ¿me confirmas tu correo, clave y el perfil con el que tienes el inconveniente para agilizar la solución?");
+            await sendWhatsAppMessage(from, "📲 Recibí tu imagen correctamente. Ryan la está revisando ahora mismo. \n\nSi es por un problema técnico y aún no me pasaste los datos, ¿me confirmás tu correo, clave y el perfil con el que tenés el inconveniente para agilizar la solución?");
             return;
         }
 
+        // =========================================================
         // 3. RECHAZO DE AUDIOS
+        // =========================================================
         if (type === 'audio') {
             await sendWhatsAppMessage(from, "Hola! Por ahora solo puedo procesar mensajes de texto. ¿Podrías escribirme tu consulta? 😊");
             return;
         }
 
-        // 4. FILTRO DE ALERTAS CRÍTICAS
+        // =========================================================
+        // 4. ATENCIÓN AL CLIENTE Y LÓGICA DE PROMOS
+        // =========================================================
         if (type === 'text') {
             const lowerUserText = textMessage.toLowerCase();
-            const palabrasCriticas = ['codigo', 'código', 'hogar', 'viaje', 'comprobante', 'pago', 'error', 'asesor', 'humano', 'no me deja'];
-            if (palabrasCriticas.some(p => lowerUserText.includes(p))) {
-                await notifyOwner(from, `Mencionó palabra crítica: "${textMessage}"`);
+
+            // NOTIFICACIÓN SI PREGUNTA POR PROMOS Y NO HAY PROMO ACTIVA
+            const promoKeywords = ['promo', 'promocion', 'promoción', 'descuento', 'oferta'];
+            if (promoKeywords.some(k => lowerUserText.includes(k)) && !promoActiva) {
+                await notifyOwner(from, `CONSULTA DE PROMO: El cliente +${from} está preguntando por promociones.`);
             }
 
-            // GUARDAR MENSAJE USUARIO
+            // FILTRO DE ALERTAS CRÍTICAS
+            const palabrasCriticas = ['codigo', 'código', 'hogar', 'viaje', 'comprobante', 'pago', 'error', 'asesor', 'humano', 'no me deja'];
+            if (palabrasCriticas.some(p => lowerUserText.includes(p))) {
+                await notifyOwner(from, `Mensaje crítico: "${textMessage}"`);
+            }
+
+            // GUARDAR MENSAJE EN SUPABASE
             await supabase.from('messages').insert([{ phone: from, role: 'user', content: textMessage }]);
 
             // BUSCAR CONTEXTO DEL CLIENTE EN SUPABASE
@@ -301,13 +423,14 @@ app.post('/webhook', async (req, res) => {
                 contextoBD = `\n\n[INFO INTERNA]: Este usuario NO ESTÁ en la base de datos. Trátalo como CLIENTE NUEVO. Ofrécele catálogo, no pidas datos de acceso porque no tiene.`;
             }
 
-            const promoContext = promoActiva ? `\n\n[PROMO ACTIVA AHORA]: ${promoActiva}. Ofrécela.` : '';
+            const promoContext = promoActiva 
+                ? `\n\n[PROMO ACTIVA AHORA]: "${promoActiva}". Menciónala.` 
+                : `\n\n[PROMO ACTIVA]: NO hay promociones activas en este momento. Si el cliente pregunta por promos, dile amablemente que no hay promos vigentes pero que los precios son súper accesibles. NO vuelvas a enviarle el catálogo completo si ya se lo diste.`;
 
-            // RECUPERAR HISTORIAL DEL CHAT PARA CLAUDE
+            // OBTENER HISTORIAL DE MENSAJES
             const { data: history } = await supabase.from('messages').select('*').eq('phone', from).order('created_at', { ascending: false }).limit(8);
             const messagesFormatted = (history || []).reverse().map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content }));
             
-            // Agregar el mensaje actual con su contexto por detrás
             messagesFormatted.push({ role: 'user', content: textMessage });
 
             // LLAMADA A ANTHROPIC CLAUDE
@@ -320,7 +443,6 @@ app.post('/webhook', async (req, res) => {
 
             const botReply = response.content[0].text;
             
-            // GUARDAR Y ENVIAR RESPUESTA
             await supabase.from('messages').insert([{ phone: from, role: 'assistant', content: botReply }]);
             await sendWhatsAppMessage(from, botReply);
         }
