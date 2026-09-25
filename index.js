@@ -122,6 +122,43 @@ async function checkVencimientos() {
 }
 setInterval(checkVencimientos, 24 * 60 * 60 * 1000);
 
+// HELPER PARA COMBINAR CLIENTES, CUENTAS Y SERVICIOS
+async function fetchFullClientes() {
+    const { data: clientes, error: errCli } = await supabase.from('CLIENTES').select('*, CUENTAS(*), SERVICIOS(*)');
+    if (errCli) {
+        console.error('Error al traer clientes:', errCli.message);
+        return [];
+    }
+
+    return (clientes || []).map(c => {
+        const cuentaObj = (c.CUENTAS && c.CUENTAS.length > 0) ? c.CUENTAS[0] : {};
+        const servicioObj = (c.SERVICIOS && c.SERVICIOS.length > 0) ? c.SERVICIOS[0] : {};
+
+        const plataforma = cuentaObj.plataforma || servicioObj.servicio_id || '';
+        const correo = cuentaObj.correo || servicioObj.usuario || '';
+        const clave = cuentaObj.clave || servicioObj.clave || '';
+        const perfil = cuentaObj.perfil || servicioObj.perfil || '';
+        const pin = cuentaObj.pin || '';
+        const fecha_vencimiento = cuentaObj.fecha_vencimiento || servicioObj.fecha_vencimiento || '';
+
+        return {
+            id: c.id,
+            nombre: c.nombre || '',
+            telefono: c.telefono || '',
+            cuenta: {
+                id: cuentaObj.id || null,
+                servicio_id: servicioObj.id || null,
+                plataforma,
+                correo,
+                clave,
+                perfil,
+                pin,
+                fecha_vencimiento
+            }
+        };
+    });
+}
+
 // ==========================================
 // ENDPOINTS DE LA API DEL PANEL WEB
 // ==========================================
@@ -135,102 +172,147 @@ app.post('/api/login', (req, res) => {
 });
 
 app.get('/api/dashboard-data', async (req, res) => {
-    const { data: clientes } = await supabase.from('CLIENTES').select('*, CUENTAS(*)');
-    const { data: cuentas } = await supabase.from('CUENTAS').select('*');
-    
-    const totalClientes = clientes?.length || 0;
-    const stockDisponible = cuentas?.filter(c => c.estado === 'disponible').length || 0;
-    const cuentasOcupadas = cuentas?.filter(c => c.estado === 'ocupado').length || 0;
-    
-    const hoy = new Date();
-    const proxsVencimientos = cuentas?.filter(c => {
-        if (!c.fecha_vencimiento || c.estado !== 'ocupado') return false;
-        const diffDays = Math.ceil((new Date(c.fecha_vencimiento) - hoy) / (1000 * 60 * 60 * 24));
-        return diffDays >= 0 && diffDays <= 3;
-    }) || [];
+    try {
+        const fullClientes = await fetchFullClientes();
+        const { data: cuentas } = await supabase.from('CUENTAS').select('*');
+        
+        const totalClientes = fullClientes.length;
+        const stockDisponible = cuentas?.filter(c => c.estado === 'disponible').length || 0;
+        const cuentasOcupadas = fullClientes.filter(c => c.cuenta.plataforma !== '').length;
+        
+        const hoy = new Date();
+        const proxsVencimientos = fullClientes.filter(c => {
+            if (!c.cuenta.fecha_vencimiento) return false;
+            const diffDays = Math.ceil((new Date(c.cuenta.fecha_vencimiento) - hoy) / (1000 * 60 * 60 * 24));
+            return diffDays >= 0 && diffDays <= 3;
+        }).length;
 
-    res.json({
-        totalClientes,
-        stockDisponible,
-        cuentasOcupadas,
-        vencimientosProximos: proxsVencimientos.length,
-        botPausado: !!pausedChats['TODOS'],
-        promoActiva: promoActiva || 'Ninguna',
-        clientes: clientes || [],
-        stockCuentas: cuentas || []
-    });
+        res.json({
+            totalClientes,
+            stockDisponible,
+            cuentasOcupadas,
+            vencimientosProximos: proxsVencimientos,
+            botPausado: !!pausedChats['TODOS'],
+            promoActiva: promoActiva || 'Ninguna',
+            clientes: fullClientes,
+            stockCuentas: cuentas || []
+        });
+    } catch(e) {
+        console.error('Error en /api/dashboard-data:', e.message);
+        res.status(500).json({ success: false, error: e.message });
+    }
 });
 
 app.post('/api/guardar-cliente', async (req, res) => {
-    const { telefono, nombre, plataforma, fecha_vencimiento, correo, password, perfil, pin } = req.body;
+    const { telefono, nombre, plataforma, fecha_vencimiento, correo, clave, password, perfil, pin } = req.body;
     const telClean = cleanNumber(telefono);
-    const dateClean = (fecha_vencimiento && fecha_vencimiento.trim() !== '') ? fecha_vencimiento : null;
-
-    await supabase.from('CLIENTES').upsert({ telefono: telClean, nombre }, { onConflict: 'telefono' });
-    await supabase.from('CUENTAS').insert([{
-        cliente_id: telClean,
-        plataforma,
-        fecha_vencimiento: dateClean,
-        correo: correo || '',
-        password: password || '',
-        perfil: perfil || '',
-        pin: pin || '',
-        estado: 'ocupado'
-    }]);
-
-    res.json({ success: true });
-});
-
-// EDICIÓN DE CLIENTES SEGURA Y CORREGIDA
-app.post('/api/editar-cliente-completo', async (req, res) => {
-    const { originalTel, nuevoTel, nombre, cuentaId, plataforma, correo, password, perfil, pin, fecha_vencimiento } = req.body;
-    console.log('📝 Editando cliente en Supabase:', { originalTel, nuevoTel, nombre, cuentaId });
+    const passValue = clave || password || '';
+    const dateClean = (fecha_vencimiento && String(fecha_vencimiento).trim() !== '') ? fecha_vencimiento : null;
 
     try {
-        const oldTelClean = cleanNumber(originalTel);
-        const newTelClean = cleanNumber(nuevoTel);
-        const dateClean = (fecha_vencimiento && String(fecha_vencimiento).trim() !== '') ? fecha_vencimiento : null;
+        let clientId = null;
+        const { data: existingCli } = await supabase.from('CLIENTES').select('id').eq('telefono', telClean).maybeSingle();
+        
+        if (existingCli) {
+            clientId = existingCli.id;
+            await supabase.from('CLIENTES').update({ nombre, telefono: telClean }).eq('id', clientId);
+        } else {
+            const { data: newCli, error: errNew } = await supabase.from('CLIENTES').insert([{ nombre, telefono: telClean }]).select().single();
+            if (errNew) throw new Error('Error al crear cliente: ' + errNew.message);
+            clientId = newCli.id;
+        }
 
-        // 1. Guardar/Actualizar datos en CLIENTES
-        const { error: errCli } = await supabase
-            .from('CLIENTES')
-            .upsert({ telefono: newTelClean, nombre }, { onConflict: 'telefono' });
-
-        if (errCli) throw new Error('Error en CLIENTES: ' + errCli.message);
-
-        // 2. Preparar objeto de CUENTAS
-        const cuentaData = {
-            cliente_id: newTelClean,
+        const { data: existingCta } = await supabase.from('CUENTAS').select('id').eq('cliente_id', clientId).maybeSingle();
+        const ctaData = {
+            cliente_id: clientId,
             plataforma: plataforma || 'Sin asignación',
             correo: correo || '',
-            password: password || '',
+            clave: passValue,
             perfil: perfil || '',
             pin: pin || '',
             fecha_vencimiento: dateClean,
             estado: 'ocupado'
         };
 
-        // 3. Actualizar o Insertar CUENTAS
-        if (cuentaId && String(cuentaId).trim() !== '' && String(cuentaId) !== 'null' && String(cuentaId) !== 'undefined') {
-            const { error: errCta } = await supabase
-                .from('CUENTAS')
-                .update(cuentaData)
-                .eq('id', Number(cuentaId));
-            if (errCta) throw new Error('Error al actualizar CUENTAS: ' + errCta.message);
+        if (existingCta) {
+            await supabase.from('CUENTAS').update(ctaData).eq('id', existingCta.id);
         } else {
-            const { error: errCtaIns } = await supabase
-                .from('CUENTAS')
-                .insert([cuentaData]);
-            if (errCtaIns) throw new Error('Error al insertar CUENTAS: ' + errCtaIns.message);
+            await supabase.from('CUENTAS').insert([ctaData]);
         }
 
-        // 4. Limpieza si cambió el número de teléfono
-        if (oldTelClean !== newTelClean && oldTelClean !== '') {
-            await supabase.from('CUENTAS').update({ cliente_id: newTelClean }).eq('cliente_id', oldTelClean);
-            await supabase.from('CLIENTES').delete().eq('telefono', oldTelClean);
+        const { data: existingSvc } = await supabase.from('SERVICIOS').select('id').eq('cliente_id', clientId).maybeSingle();
+        const svcData = {
+            cliente_id: clientId,
+            servicio_id: plataforma || 'Sin asignación',
+            usuario: correo || '',
+            clave: passValue,
+            perfil: perfil || '',
+            fecha_vencimiento: dateClean,
+            estado: 'ACTIVO'
+        };
+
+        if (existingSvc) {
+            await supabase.from('SERVICIOS').update(svcData).eq('id', existingSvc.id);
+        } else {
+            await supabase.from('SERVICIOS').insert([svcData]);
         }
 
-        console.log('✅ Cliente guardado con éxito en Supabase:', newTelClean);
+        res.json({ success: true });
+    } catch(e) {
+        console.error('Error en /api/guardar-cliente:', e.message);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.post('/api/editar-cliente-completo', async (req, res) => {
+    const { clientId, nuevoTel, nombre, plataforma, correo, clave, password, perfil, pin, fecha_vencimiento } = req.body;
+    console.log('📝 Guardando cambios para cliente ID:', clientId);
+
+    try {
+        const idNum = Number(clientId);
+        const telClean = cleanNumber(nuevoTel);
+        const passValue = clave || password || '';
+        const dateClean = (fecha_vencimiento && String(fecha_vencimiento).trim() !== '') ? fecha_vencimiento : null;
+
+        const { error: errCli } = await supabase.from('CLIENTES').update({ nombre, telefono: telClean }).eq('id', idNum);
+        if (errCli) throw new Error('Error en CLIENTES: ' + errCli.message);
+
+        const { data: existingCta } = await supabase.from('CUENTAS').select('id').eq('cliente_id', idNum).maybeSingle();
+        const ctaData = {
+            cliente_id: idNum,
+            plataforma: plataforma || 'Sin asignación',
+            correo: correo || '',
+            clave: passValue,
+            perfil: perfil || '',
+            pin: pin || '',
+            fecha_vencimiento: dateClean,
+            estado: 'ocupado'
+        };
+
+        if (existingCta) {
+            await supabase.from('CUENTAS').update(ctaData).eq('id', existingCta.id);
+        } else {
+            await supabase.from('CUENTAS').insert([ctaData]);
+        }
+
+        const { data: existingSvc } = await supabase.from('SERVICIOS').select('id').eq('cliente_id', idNum).maybeSingle();
+        const svcData = {
+            cliente_id: idNum,
+            servicio_id: plataforma || 'Sin asignación',
+            usuario: correo || '',
+            clave: passValue,
+            perfil: perfil || '',
+            fecha_vencimiento: dateClean,
+            estado: 'ACTIVO'
+        };
+
+        if (existingSvc) {
+            await supabase.from('SERVICIOS').update(svcData).eq('id', existingSvc.id);
+        } else {
+            await supabase.from('SERVICIOS').insert([svcData]);
+        }
+
+        console.log('✅ Cliente actualizado exitosamente:', idNum);
         res.json({ success: true });
     } catch (e) {
         console.error('❌ Error en /api/editar-cliente-completo:', e.message);
@@ -238,7 +320,6 @@ app.post('/api/editar-cliente-completo', async (req, res) => {
     }
 });
 
-// ENVIAR MENSAJE DIRECTO POR WHATSAPP
 app.post('/api/enviar-mensaje-cliente', async (req, res) => {
     const { telefono, mensaje } = req.body;
     try {
@@ -251,15 +332,13 @@ app.post('/api/enviar-mensaje-cliente', async (req, res) => {
     }
 });
 
-// CHAT DIRECTO CON ALICE DESDE EL PANEL
 app.post('/api/chat-bot', async (req, res) => {
     const { mensaje, historial } = req.body;
     try {
-        const { data: clientes } = await supabase.from('CLIENTES').select('*, CUENTAS(*)');
+        const fullClientes = await fetchFullClientes();
         
-        const listaResumen = clientes?.map(c => {
-            const cuenta = c.CUENTAS?.[0] || {};
-            return `• ${c.nombre} (+${c.telefono}) | Servicio: ${cuenta.plataforma || 'Sin asignación'} | Vence: ${cuenta.fecha_vencimiento || 'N/A'}`;
+        const listaResumen = fullClientes.map(c => {
+            return `• ${c.nombre} (+${c.telefono}) | Servicio: ${c.cuenta.plataforma || 'Sin asignación'} | Correo: ${c.cuenta.correo || '-'} | Vence: ${c.cuenta.fecha_vencimiento || 'N/A'}`;
         }).join('\n') || 'No hay clientes registrados actualmente.';
 
         const messagesFormatted = (historial || []).map(m => ({ role: m.role, content: m.content }));
@@ -268,7 +347,7 @@ app.post('/api/chat-bot', async (req, res) => {
         const response = await client.messages.create({
             model: 'claude-sonnet-4-6',
             max_tokens: 600,
-            system: SYSTEM_PROMPT + `\n\n[INFO INTERNA DEL PANEL WEB]: Estás conversando con RYAN (tu dueño). Tenés acceso en tiempo real a la lista de clientes cargados en Supabase:\n\n${listaResumen}\n\nSi Ryan te pregunta por clientes o vencimientos, respondé con esta información.`,
+            system: SYSTEM_PROMPT + `\n\n[INFO INTERNA DEL PANEL WEB]: Estás conversando con RYAN (tu dueño). Tenés acceso en tiempo real a la lista de clientes cargados en Supabase:\n\n${listaResumen}\n\nSi Ryan te pregunta por clientes o vencimientos, respondé con esta información exacta.`,
             messages: messagesFormatted
         });
 
@@ -280,18 +359,25 @@ app.post('/api/chat-bot', async (req, res) => {
 });
 
 app.post('/api/agregar-stock', async (req, res) => {
-    const { plataforma, correo, password, perfil, pin } = req.body;
+    const { plataforma, correo, clave, password, perfil, pin } = req.body;
+    const passValue = clave || password || '';
     await supabase.from('CUENTAS').insert([{
-        plataforma, correo, password, perfil: perfil || '', pin: pin || '', estado: 'disponible'
+        plataforma, correo, clave: passValue, perfil: perfil || '', pin: pin || '', estado: 'disponible'
     }]);
     res.json({ success: true });
 });
 
 app.post('/api/eliminar-cliente', async (req, res) => {
-    const { telefono } = req.body;
-    await supabase.from('CUENTAS').delete().eq('cliente_id', telefono);
-    await supabase.from('CLIENTES').delete().eq('telefono', telefono);
-    res.json({ success: true });
+    const { clientId } = req.body;
+    try {
+        const idNum = Number(clientId);
+        await supabase.from('CUENTAS').delete().eq('cliente_id', idNum);
+        await supabase.from('SERVICIOS').delete().eq('cliente_id', idNum);
+        await supabase.from('CLIENTES').delete().eq('id', idNum);
+        res.json({ success: true });
+    } catch(e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
 });
 
 app.post('/api/control-bot', async (req, res) => {
@@ -420,7 +506,7 @@ app.get('/', (req, res) => {
                 <form id="formCargarStock" style="margin-bottom:25px;">
                     <input type="text" id="stkPlataforma" placeholder="Plataforma (Ej: Netflix, Disney+)" required>
                     <input type="text" id="stkCorreo" placeholder="Correo electrónico" required>
-                    <input type="text" id="stkPass" placeholder="Contraseña" required>
+                    <input type="text" id="stkPass" placeholder="Contraseña / Clave" required>
                     <input type="text" id="stkPerfil" placeholder="Perfil (Opcional)">
                     <input type="text" id="stkPin" placeholder="PIN (Opcional)">
                     <button type="submit" class="btn-primary">Guardar en Stock</button>
@@ -477,7 +563,7 @@ app.get('/', (req, res) => {
                     <input type="text" id="addPlat" placeholder="Servicio (Ej: Netflix Perfil Extra)" required>
                     <input type="date" id="addVenc" required>
                     <input type="text" id="addMail" placeholder="Correo asignado (Opcional)">
-                    <input type="text" id="addPass" placeholder="Contraseña asignada (Opcional)">
+                    <input type="text" id="addPass" placeholder="Contraseña / Clave asignada (Opcional)">
                     <input type="text" id="addPerfil" placeholder="Perfil asignado (Opcional)">
                     <input type="text" id="addPin" placeholder="PIN asignado (Opcional)">
                     <button type="submit" class="btn-primary">Registrar Cliente en Supabase</button>
@@ -490,8 +576,7 @@ app.get('/', (req, res) => {
         <div id="editModal" class="modal">
             <div class="modal-box">
                 <h3>✏️ Editar Datos del Cliente</h3>
-                <input type="hidden" id="editOriginalTel">
-                <input type="hidden" id="editCuentaId">
+                <input type="hidden" id="editClientId">
                 <label style="font-size:0.8rem; color:var(--muted);">Nombre del Cliente:</label>
                 <input type="text" id="editNom" placeholder="Nombre">
                 <label style="font-size:0.8rem; color:var(--muted);">Teléfono WhatsApp:</label>
@@ -500,8 +585,8 @@ app.get('/', (req, res) => {
                 <input type="text" id="editPlat" placeholder="Plataforma">
                 <label style="font-size:0.8rem; color:var(--muted);">Correo:</label>
                 <input type="text" id="editMail" placeholder="Correo">
-                <label style="font-size:0.8rem; color:var(--muted);">Contraseña:</label>
-                <input type="text" id="editPass" placeholder="Contraseña">
+                <label style="font-size:0.8rem; color:var(--muted);">Contraseña / Clave:</label>
+                <input type="text" id="editPass" placeholder="Contraseña / Clave">
                 <label style="font-size:0.8rem; color:var(--muted);">Perfil / PIN:</label>
                 <div style="display:flex; gap:10px;">
                     <input type="text" id="editPerfil" placeholder="Perfil">
@@ -593,8 +678,8 @@ app.get('/', (req, res) => {
                 const tbody = document.getElementById('tblClientes');
                 tbody.innerHTML = '';
                 lista.forEach((c, index) => {
-                    const cuenta = c.CUENTAS && c.CUENTAS.length > 0 ? c.CUENTAS[0] : {};
-                    const mailPass = (cuenta.correo || cuenta.password) ? \`\${cuenta.correo || '-'} / \${cuenta.password || '-'} / P:\${cuenta.perfil || '-'} (PIN:\${cuenta.pin || '-'})\` : 'Sin datos';
+                    const cuenta = c.cuenta || {};
+                    const mailPass = (cuenta.correo || cuenta.clave) ? \`\${cuenta.correo || '-'} / \${cuenta.clave || '-'} / P:\${cuenta.perfil || '-'} (PIN:\${cuenta.pin || '-'})\` : 'Sin datos';
                     tbody.innerHTML += \`
                         <tr>
                             <td><strong>\${c.nombre}</strong></td>
@@ -605,7 +690,7 @@ app.get('/', (req, res) => {
                             <td>
                                 <button class="btn-edit" onclick="openEditModal(\${index})">✏️ Editar</button>
                                 <button class="btn-msg" onclick="openMsgModal(\${index})">💬 Mensaje</button>
-                                <button class="btn-danger" onclick="eliminarCliente('\${c.telefono}')">🗑️</button>
+                                <button class="btn-danger" onclick="eliminarCliente(\${c.id})">🗑️</button>
                             </td>
                         </tr>
                     \`;
@@ -619,10 +704,10 @@ app.get('/', (req, res) => {
                     tbody.innerHTML += \`
                         <tr>
                             <td><strong>\${s.plataforma}</strong></td>
-                            <td>\${s.correo} / \${s.password}</td>
+                            <td>\${s.correo} / \${s.clave || '-'}</td>
                             <td>Perfil: \${s.perfil || '-'} / PIN: \${s.pin || '-'}</td>
                             <td>\${s.estado === 'disponible' ? '🟢 Disponible' : '🔴 Ocupado'}</td>
-                            <td>\${s.cliente_id ? '+' + s.cliente_id : 'N/A'}</td>
+                            <td>\${s.cliente_id ? 'ID: ' + s.cliente_id : 'N/A'}</td>
                         </tr>
                     \`;
                 });
@@ -633,7 +718,7 @@ app.get('/', (req, res) => {
                 const filtered = localClientes.filter(c => 
                     c.nombre.toLowerCase().includes(q) || 
                     c.telefono.includes(q) || 
-                    (c.CUENTAS?.[0]?.plataforma || '').toLowerCase().includes(q)
+                    (c.cuenta?.plataforma || '').toLowerCase().includes(q)
                 );
                 renderClientesTable(filtered);
             }
@@ -641,15 +726,14 @@ app.get('/', (req, res) => {
             function openEditModal(index) {
                 const clientObj = localClientes[index];
                 if (!clientObj) return;
-                const cuenta = (clientObj.CUENTAS && clientObj.CUENTAS.length > 0) ? clientObj.CUENTAS[0] : {};
+                const cuenta = clientObj.cuenta || {};
 
-                document.getElementById('editOriginalTel').value = clientObj.telefono || '';
+                document.getElementById('editClientId').value = clientObj.id;
                 document.getElementById('editNom').value = clientObj.nombre || '';
                 document.getElementById('editTel').value = clientObj.telefono || '';
-                document.getElementById('editCuentaId').value = cuenta.id || '';
                 document.getElementById('editPlat').value = cuenta.plataforma || '';
                 document.getElementById('editMail').value = cuenta.correo || '';
-                document.getElementById('editPass').value = cuenta.password || '';
+                document.getElementById('editPass').value = cuenta.clave || '';
                 document.getElementById('editPerfil').value = cuenta.perfil || '';
                 document.getElementById('editPin').value = cuenta.pin || '';
                 document.getElementById('editVenc').value = cuenta.fecha_vencimiento || '';
@@ -665,13 +749,12 @@ app.get('/', (req, res) => {
                 btn.textContent = 'Guardando...';
 
                 const body = {
-                    originalTel: document.getElementById('editOriginalTel').value,
+                    clientId: document.getElementById('editClientId').value,
                     nuevoTel: document.getElementById('editTel').value,
                     nombre: document.getElementById('editNom').value,
-                    cuentaId: document.getElementById('editCuentaId').value,
                     plataforma: document.getElementById('editPlat').value,
                     correo: document.getElementById('editMail').value,
-                    password: document.getElementById('editPass').value,
+                    clave: document.getElementById('editPass').value,
                     perfil: document.getElementById('editPerfil').value,
                     pin: document.getElementById('editPin').value,
                     fecha_vencimiento: document.getElementById('editVenc').value
@@ -763,7 +846,7 @@ app.get('/', (req, res) => {
                     plataforma: document.getElementById('addPlat').value,
                     fecha_vencimiento: document.getElementById('addVenc').value,
                     correo: document.getElementById('addMail').value,
-                    password: document.getElementById('addPass').value,
+                    clave: document.getElementById('addPass').value,
                     perfil: document.getElementById('addPerfil').value,
                     pin: document.getElementById('addPin').value,
                 };
@@ -778,7 +861,7 @@ app.get('/', (req, res) => {
                 const body = {
                     plataforma: document.getElementById('stkPlataforma').value,
                     correo: document.getElementById('stkCorreo').value,
-                    password: document.getElementById('stkPass').value,
+                    clave: document.getElementById('stkPass').value,
                     perfil: document.getElementById('stkPerfil').value,
                     pin: document.getElementById('stkPin').value
                 };
@@ -788,9 +871,9 @@ app.get('/', (req, res) => {
                 loadDashboardData();
             });
 
-            async function eliminarCliente(tel) {
+            async function eliminarCliente(clientId) {
                 if (confirm('¿Seguro que deseas eliminar este cliente?')) {
-                    await fetch('/api/eliminar-cliente', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({telefono: tel}) });
+                    await fetch('/api/eliminar-cliente', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ clientId }) });
                     loadDashboardData();
                 }
             }
@@ -875,7 +958,7 @@ app.post('/webhook', async (req, res) => {
 
                 const restOfMessage = rawMsg.substring(rawMsg.indexOf(parts[1]) + parts[1].length).trim();
 
-                if (restOfMessage.includes('\n') || restOfMessage.toLowerCase().includes('correo') || restOfMessage.toLowerCase().includes('contraseña')) {
+                if (restOfMessage.includes('\n') || restOfMessage.toLowerCase().includes('correo') || restOfMessage.toLowerCase().includes('contraseña') || restOfMessage.toLowerCase().includes('clave')) {
                     const mensajeEnviar = `🎉 *¡Tus datos de acceso de NEXXUS!* 🎉\n\n${restOfMessage}\n\n⚠️ *Importante:* No modifiques los datos de las cuentas para evitar bloqueos. ¡Gracias por elegirnos! - NEXXUS`;
                     await sendWhatsAppMessage(targetPhone, mensajeEnviar);
                     await sendWhatsAppMessage(from, `✅ Acceso enviado con éxito al cliente +${targetPhone}`);
@@ -888,19 +971,22 @@ app.post('/webhook', async (req, res) => {
                         .ilike('plataforma', `%${plataformaBuscada}%`)
                         .eq('estado', 'disponible')
                         .limit(1)
-                        .single();
+                        .maybeSingle();
 
                     if (!cuentaData) {
                         await sendWhatsAppMessage(from, `❌ No hay stock disponible de ${plataformaBuscada} en Supabase.`);
                         return;
                     }
 
-                    let msgCliente = `🎉 *¡Tus datos de acceso de NEXXUS!* 🎉\n\n📺 *Plataforma:* ${cuentaData.plataforma}\n📧 *Correo:* ${cuentaData.correo}\n🔑 *Contraseña:* ${cuentaData.password}`;
+                    let msgCliente = `🎉 *¡Tus datos de acceso de NEXXUS!* 🎉\n\n📺 *Plataforma:* ${cuentaData.plataforma}\n📧 *Correo:* ${cuentaData.correo}\n🔑 *Contraseña:* ${cuentaData.clave}`;
                     if (cuentaData.perfil) msgCliente += `\n👤 *Perfil:* ${cuentaData.perfil}`;
                     if (cuentaData.pin) msgCliente += `\n🔢 *PIN:* ${cuentaData.pin}`;
                     msgCliente += `\n\n⚠️ *Importante:* No modifiques los datos. ¡Gracias por elegirnos! - NEXXUS`;
 
-                    await supabase.from('CUENTAS').update({ estado: 'ocupado', cliente_id: targetPhone }).eq('id', cuentaData.id);
+                    const { data: clientObj } = await supabase.from('CLIENTES').select('id').eq('telefono', targetPhone).maybeSingle();
+                    if (clientObj) {
+                        await supabase.from('CUENTAS').update({ estado: 'ocupado', cliente_id: clientObj.id }).eq('id', cuentaData.id);
+                    }
                     await sendWhatsAppMessage(targetPhone, msgCliente);
                     await sendWhatsAppMessage(from, `✅ Cuenta de ${cuentaData.plataforma} entregada desde Supabase a +${targetPhone}`);
                     return;
@@ -915,8 +1001,11 @@ app.post('/webhook', async (req, res) => {
                     const serv = partes[2].trim();
                     const fec = partes[3].trim();
 
-                    await supabase.from('CLIENTES').upsert({ telefono: tel, nombre: nom }, { onConflict: 'telefono' });
-                    await supabase.from('CUENTAS').insert([{ cliente_id: tel, plataforma: serv, fecha_vencimiento: fec, estado: 'ocupado' }]);
+                    const { data: newCli } = await supabase.from('CLIENTES').insert([{ telefono: tel, nombre: nom }]).select().single();
+                    if (newCli) {
+                        await supabase.from('CUENTAS').insert([{ cliente_id: newCli.id, plataforma: serv, fecha_vencimiento: fec, estado: 'ocupado' }]);
+                        await supabase.from('SERVICIOS').insert([{ cliente_id: newCli.id, servicio_id: serv, fecha_vencimiento: fec, estado: 'ACTIVO' }]);
+                    }
                     await sendWhatsAppMessage(from, `✅ Cliente cargado en Supabase:\n👤 ${nom}\n📱 +${tel}\n📦 ${serv}\n📅 Vence: ${fec}`);
                 }
                 return;
@@ -987,18 +1076,23 @@ app.post('/webhook', async (req, res) => {
 
             await supabase.from('messages').insert([{ phone: from, role: 'user', content: textMessage }]);
 
-            const { data: cliente } = await supabase.from('CLIENTES').select('*, CUENTAS(*)').eq('telefono', from).single();
+            const { data: clienteList } = await supabase.from('CLIENTES').select('*, CUENTAS(*), SERVICIOS(*)');
+            const cleanFrom = cleanNumber(from);
+            const cliente = clienteList?.find(c => cleanNumber(c.telefono).endsWith(cleanFrom.slice(-8)) || cleanFrom.endsWith(cleanNumber(c.telefono).slice(-8)));
             
             let contextoBD = '';
             if (cliente) {
                 contextoBD = `\n\n[INFO INTERNA - YA ES CLIENTE]: Se llama ${cliente.nombre}. `;
-                if (cliente.CUENTAS && cliente.CUENTAS.length > 0) {
-                    const svc = cliente.CUENTAS[0];
-                    const faltanDias = Math.ceil((new Date(svc.fecha_vencimiento) - new Date()) / (1000 * 60 * 60 * 24));
-                    contextoBD += `Tiene ${svc.plataforma}. Vence el ${svc.fecha_vencimiento} (Faltan ${faltanDias} días). `;
-                    
-                    if (faltanDias <= 5 && faltanDias >= 0) {
-                        contextoBD += `[INSTRUCCIÓN OBLIGATORIA: Como el servicio vence en ${faltanDias} días, recuérdale con mucha amabilidad antes de despedirte que puede ir renovando al alias RYAN.MB para evitar cortes de servicio].`;
+                const cuentaObj = cliente.CUENTAS?.[0] || cliente.SERVICIOS?.[0];
+                if (cuentaObj) {
+                    const fechaVenc = cuentaObj.fecha_vencimiento;
+                    const plat = cuentaObj.plataforma || cuentaObj.servicio_id;
+                    if (fechaVenc) {
+                        const faltanDias = Math.ceil((new Date(fechaVenc) - new Date()) / (1000 * 60 * 60 * 24));
+                        contextoBD += `Tiene ${plat}. Vence el ${fechaVenc} (Faltan ${faltanDias} días). `;
+                        if (faltanDias <= 5 && faltanDias >= 0) {
+                            contextoBD += `[INSTRUCCIÓN OBLIGATORIA: Como el servicio vence en ${faltanDias} días, recuérdale con mucha amabilidad antes de despedirte que puede ir renovando al alias RYAN.MB para evitar cortes de servicio].`;
+                        }
                     }
                 }
             } else {
