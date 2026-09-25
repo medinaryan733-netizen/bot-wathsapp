@@ -338,11 +338,21 @@ app.post('/api/enviar-mensaje-cliente', async (req, res) => {
     }
 });
 
+// CHAT DIRECTO CON ALICE DESDE EL PANEL (CON CONTEXTO DE CLIENTES Y STOCK)
 app.post('/api/chat-bot', async (req, res) => {
     const { mensaje, historial } = req.body;
     try {
         const fullClientes = await fetchFullClientes();
-        const listaResumen = fullClientes.map(c => `• ${c.nombre} (+${c.telefono}) | Servicio: ${c.cuenta.plataforma || 'Sin asignación'} | Correo: ${c.cuenta.correo || '-'} | PIN: ${c.cuenta.pin || '-'} | Chances: ${c.chances} | Vence: ${c.cuenta.fecha_vencimiento || 'N/A'}`).join('\n') || 'No hay clientes.';
+        const { data: cuentasStock } = await supabase.from('CUENTAS').select('*');
+        
+        const listaClientes = fullClientes.map(c => 
+            `• ${c.nombre} (+${c.telefono}) | Servicio: ${c.cuenta.plataforma || 'Sin asignación'} | Correo: ${c.cuenta.correo || '-'} | PIN: ${c.cuenta.pin || '-'} | Chances: ${c.chances}`
+        ).join('\n') || 'No hay clientes registrados.';
+
+        const stockDisp = cuentasStock?.filter(s => String(s.estado).toLowerCase() === 'disponible') || [];
+        const listaStock = stockDisp.map(s => 
+            `• ${s.plataforma} | Correo: ${s.correo} | Clave: ${s.clave || '-'} | Perfil: ${s.perfil || '-'} | PIN: ${s.pin || '-'}`
+        ).join('\n') || 'No hay stock disponible actualmente.';
 
         const messagesFormatted = (historial || []).map(m => ({ role: m.role, content: m.content }));
         messagesFormatted.push({ role: 'user', content: mensaje });
@@ -350,7 +360,7 @@ app.post('/api/chat-bot', async (req, res) => {
         const response = await client.messages.create({
             model: 'claude-sonnet-4-6',
             max_tokens: 600,
-            system: SYSTEM_PROMPT + `\n\n[INFO INTERNA DEL PANEL WEB]: Estás conversando con RYAN (tu dueño). Tenés acceso a la lista de clientes:\n\n${listaResumen}`,
+            system: SYSTEM_PROMPT + `\n\n[INFO INTERNA DEL PANEL WEB]: Estás conversando con RYAN (tu dueño).\n\n1. CLIENTES CARGADOS:\n${listaClientes}\n\n2. STOCK DISPONIBLE:\n${listaStock}\n\nSi Ryan te pregunta por clientes, vencimientos o stock disponible, usá estos datos para responderle con precisión.`,
             messages: messagesFormatted
         });
 
