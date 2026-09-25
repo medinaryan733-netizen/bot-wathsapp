@@ -146,12 +146,14 @@ const client = new Client({
 });
 
 client.on('qr', (qr) => {
-    console.log('Escanea este QR con tu WhatsApp para iniciar el Bot:');
+    console.log('=========================================');
+    console.log('Intenta escanear este QR:');
     qrcode.generate(qr, { small: true });
-});
-
-client.on('ready', () => {
-    console.log('✅ ALICE conectada a WhatsApp y lista para trabajar.');
+    console.log('=========================================');
+    console.log('🚨 SI EL DIBUJO DE ARRIBA NO ESCANEA, COPIA EL TEXTO LARGO DE ABAJO:');
+    console.log(qr);
+    console.log('🚨 Pégalo en una página web como https://es.qr-code-generator.com/ (eligiendo la opción "Texto") para crear un QR limpio.');
+    console.log('=========================================');
 });
 
 client.on('message', async (msg) => {
