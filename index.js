@@ -13,7 +13,7 @@ app.listen(PORT, () => {
 
 // --- 2. AQUÍ DEBAJO VA TODO LO DEMÁS QUE YA TENÍAS ---
 // (Por ejemplo: la importación de Client, LocalAuth, la configuración de Puppeteer, etc.)
-const express = require('express');
+
 const cors = require('cors');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
