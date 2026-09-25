@@ -165,7 +165,6 @@ puppeteer: {
         '--disable-accelerated-2d-canvas',
         '--no-first-run',
         '--no-zygote',
-        '--single-process', // (Pruébalo ahora con este o sin este, pero asegúrate de tener los de abajo)
         '--disable-gpu',
         '--disable-software-rasterizer',
         '--disable-extensions'
