@@ -289,4 +289,6 @@ client.on('auth_failure', msg => {
 client.on('disconnected', (reason) => {
     console.log('Cliente desconectado:', reason);
 });
-client.initialize();
+client.initialize().catch(err => {
+    console.error('Error al inicializar WhatsApp Client:', err);
+});
