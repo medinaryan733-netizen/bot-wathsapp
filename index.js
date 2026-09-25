@@ -164,12 +164,13 @@ app.get('/api/dashboard-data', async (req, res) => {
 app.post('/api/guardar-cliente', async (req, res) => {
     const { telefono, nombre, plataforma, fecha_vencimiento, correo, password, perfil, pin } = req.body;
     const telClean = cleanNumber(telefono);
+    const dateClean = (fecha_vencimiento && fecha_vencimiento.trim() !== '') ? fecha_vencimiento : null;
 
     await supabase.from('CLIENTES').upsert({ telefono: telClean, nombre }, { onConflict: 'telefono' });
     await supabase.from('CUENTAS').insert([{
         cliente_id: telClean,
         plataforma,
-        fecha_vencimiento,
+        fecha_vencimiento: dateClean,
         correo: correo || '',
         password: password || '',
         perfil: perfil || '',
@@ -180,58 +181,64 @@ app.post('/api/guardar-cliente', async (req, res) => {
     res.json({ success: true });
 });
 
-// EDICIÓN COMPLETA Y SEGURA EN SUPABASE
+// EDICIÓN DE CLIENTES SEGURA Y CORREGIDA
 app.post('/api/editar-cliente-completo', async (req, res) => {
     const { originalTel, nuevoTel, nombre, cuentaId, plataforma, correo, password, perfil, pin, fecha_vencimiento } = req.body;
+    console.log('📝 Editando cliente en Supabase:', { originalTel, nuevoTel, nombre, cuentaId });
+
     try {
         const oldTelClean = cleanNumber(originalTel);
         const newTelClean = cleanNumber(nuevoTel);
+        const dateClean = (fecha_vencimiento && String(fecha_vencimiento).trim() !== '') ? fecha_vencimiento : null;
 
-        // 1. Actualizar datos del cliente
-        if (oldTelClean !== newTelClean) {
-            await supabase.from('CLIENTES').upsert({ telefono: newTelClean, nombre }, { onConflict: 'telefono' });
+        // 1. Guardar/Actualizar datos en CLIENTES
+        const { error: errCli } = await supabase
+            .from('CLIENTES')
+            .upsert({ telefono: newTelClean, nombre }, { onConflict: 'telefono' });
+
+        if (errCli) throw new Error('Error en CLIENTES: ' + errCli.message);
+
+        // 2. Preparar objeto de CUENTAS
+        const cuentaData = {
+            cliente_id: newTelClean,
+            plataforma: plataforma || 'Sin asignación',
+            correo: correo || '',
+            password: password || '',
+            perfil: perfil || '',
+            pin: pin || '',
+            fecha_vencimiento: dateClean,
+            estado: 'ocupado'
+        };
+
+        // 3. Actualizar o Insertar CUENTAS
+        if (cuentaId && String(cuentaId).trim() !== '' && String(cuentaId) !== 'null' && String(cuentaId) !== 'undefined') {
+            const { error: errCta } = await supabase
+                .from('CUENTAS')
+                .update(cuentaData)
+                .eq('id', Number(cuentaId));
+            if (errCta) throw new Error('Error al actualizar CUENTAS: ' + errCta.message);
         } else {
-            await supabase.from('CLIENTES').update({ nombre }).eq('telefono', oldTelClean);
+            const { error: errCtaIns } = await supabase
+                .from('CUENTAS')
+                .insert([cuentaData]);
+            if (errCtaIns) throw new Error('Error al insertar CUENTAS: ' + errCtaIns.message);
         }
 
-        // 2. Actualizar o insertar datos de la cuenta
-        if (cuentaId && cuentaId !== '' && cuentaId !== 'null' && cuentaId !== 'undefined') {
-            await supabase.from('CUENTAS').update({
-                cliente_id: newTelClean,
-                plataforma,
-                correo: correo || '',
-                password: password || '',
-                perfil: perfil || '',
-                pin: pin || '',
-                fecha_vencimiento
-            }).eq('id', cuentaId);
-        } else {
-            await supabase.from('CUENTAS').insert([{
-                cliente_id: newTelClean,
-                plataforma,
-                correo: correo || '',
-                password: password || '',
-                perfil: perfil || '',
-                pin: pin || '',
-                fecha_vencimiento,
-                estado: 'ocupado'
-            }]);
-        }
-
-        // 3. Si cambió el número de teléfono, limpiar el registro viejo
-        if (oldTelClean !== newTelClean) {
+        // 4. Limpieza si cambió el número de teléfono
+        if (oldTelClean !== newTelClean && oldTelClean !== '') {
             await supabase.from('CUENTAS').update({ cliente_id: newTelClean }).eq('cliente_id', oldTelClean);
             await supabase.from('CLIENTES').delete().eq('telefono', oldTelClean);
         }
 
+        console.log('✅ Cliente guardado con éxito en Supabase:', newTelClean);
         res.json({ success: true });
     } catch (e) {
-        console.error('Error al editar cliente:', e.message);
+        console.error('❌ Error en /api/editar-cliente-completo:', e.message);
         res.status(500).json({ success: false, error: e.message });
     }
 });
 
-// ENVIAR MENSAJE DIRECTO POR WHATSAPP A UN CLIENTE DESDE EL PANEL
+// ENVIAR MENSAJE DIRECTO POR WHATSAPP
 app.post('/api/enviar-mensaje-cliente', async (req, res) => {
     const { telefono, mensaje } = req.body;
     try {
@@ -244,7 +251,7 @@ app.post('/api/enviar-mensaje-cliente', async (req, res) => {
     }
 });
 
-// CHAT DIRECTO CON ALICE DESDE EL PANEL (CON ACCESO EN VIVO A LOS CLIENTES)
+// CHAT DIRECTO CON ALICE DESDE EL PANEL
 app.post('/api/chat-bot', async (req, res) => {
     const { mensaje, historial } = req.body;
     try {
@@ -371,7 +378,6 @@ app.get('/', (req, res) => {
                 <button onclick="logout()" style="width:auto; background:#ef4444; color:#fff; border:none; padding:8px 15px; cursor:pointer; border-radius:6px;">Cerrar Sesión</button>
             </header>
 
-            <!-- TABS NAVIGATION -->
             <div class="tabs">
                 <button class="tab-btn active" onclick="switchTab('tabResumen')">1. 📊 Resumen</button>
                 <button class="tab-btn" onclick="switchTab('tabClientes')">2. 👥 Clientes</button>
@@ -503,7 +509,7 @@ app.get('/', (req, res) => {
                 </div>
                 <label style="font-size:0.8rem; color:var(--muted);">Fecha de Vencimiento:</label>
                 <input type="date" id="editVenc">
-                <button onclick="saveEditClienteCompleto()" class="btn-primary">Guardar Cambios</button>
+                <button id="btnSaveEdit" onclick="saveEditClienteCompleto()" class="btn-primary">Guardar Cambios</button>
                 <button onclick="closeEditModal()" style="background:#ef4444; color:#fff; border:none; padding:12px; width:100%; border-radius:6px; cursor:pointer; margin-top:5px;">Cancelar</button>
             </div>
         </div>
@@ -632,7 +638,6 @@ app.get('/', (req, res) => {
                 renderClientesTable(filtered);
             }
 
-            // EDICIÓN SEGURA POR ÍNDICE
             function openEditModal(index) {
                 const clientObj = localClientes[index];
                 if (!clientObj) return;
@@ -655,6 +660,10 @@ app.get('/', (req, res) => {
             function closeEditModal() { document.getElementById('editModal').style.display = 'none'; }
 
             async function saveEditClienteCompleto() {
+                const btn = document.getElementById('btnSaveEdit');
+                btn.disabled = true;
+                btn.textContent = 'Guardando...';
+
                 const body = {
                     originalTel: document.getElementById('editOriginalTel').value,
                     nuevoTel: document.getElementById('editTel').value,
@@ -678,13 +687,16 @@ app.get('/', (req, res) => {
 
                     if (res.ok && data.success) {
                         closeEditModal();
-                        alert('✅ Datos del cliente actualizados');
-                        loadDashboardData();
+                        alert('✅ Guardado correctamente en Supabase');
+                        await loadDashboardData();
                     } else {
-                        alert('❌ Error al guardar: ' + (data.error || 'Ocurrió un problema'));
+                        alert('❌ Error al guardar en Supabase: ' + (data.error || 'Verifica los campos'));
                     }
                 } catch(e) {
                     alert('❌ Error de conexión: ' + e.message);
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = 'Guardar Cambios';
                 }
             }
 
