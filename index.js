@@ -396,12 +396,12 @@ app.post('/api/chat-bot', async (req, res) => {
                 const { error: insertError } = await supabase.from('CUENTAS').insert(registrosAInsertar);
 
                 if (!insertError) {
-                    accionRealizada = \n\n[ACCIÓN EJECUTADA]: Cuenta de ${plataforma} (${correo}) cargada exitosamente con ${registrosAInsertar.length} perfiles en la base de datos.;
+                    accionRealizada = `\n\n[ACCIÓN EJECUTADA]: Cuenta de ${plataforma} (${correo}) cargada exitosamente con ${registrosAInsertar.length} perfiles en la base de datos.`;
                 } else {
-                    accionRealizada = \n\n[ERROR AL GUARDAR]: No se pudieron guardar los perfiles: ${insertError.message};
+                    accionRealizada = `\n\n[ERROR AL GUARDAR]: No se pudieron guardar los perfiles: ${insertError.message}`;
                 }
             } else {
-                accionRealizada = \n\n[ERROR]: Faltan datos obligatorios o el formato no es correcto. Usá: !nuevostock Plataforma | Correo | Clave | Perfil1,Pin1 | Perfil2,Pin2;
+                accionRealizada = `\n\n[ERROR]: Faltan datos obligatorios...`. Usá: !nuevostock Plataforma | Correo | Clave | Perfil1,Pin1 | Perfil2,Pin2;
             }
         }
         const messagesFormatted = (historial || []).map(m => ({ role: m.role, content: m.content }));
