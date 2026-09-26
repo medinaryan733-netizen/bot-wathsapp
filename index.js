@@ -356,7 +356,7 @@ app.post('/api/chat-bot', async (req, res) => {
 
         const stockDisp = cuentasStock?.filter(s => String(s.estado || '').toLowerCase().trim() === 'disponible') || [];
         const listaStock = stockDisp.map(s => 
-            `• ${s.plataforma} | Correo: ${s.correo} | Clave: ${s.clave || '-'} | Perfil: ${s.perfil || '-'} | PIN: ${s.pin || '-'}`
+            `• ID: ${s.id} | ${s.plataforma} | Correo: ${s.correo} | Clave: ${s.clave || '-'} | Perfil: ${s.perfil || '-'} | PIN: ${s.pin || '-'} | Estado: ${s.estado}`
         ).join('\n') || 'No hay stock disponible actualmente.';
 
         const historialConversacion = (ultimosMensajes || []).reverse().map(m => 
@@ -366,65 +366,117 @@ app.post('/api/chat-bot', async (req, res) => {
         const messagesFormatted = (historial || []).map(m => ({ role: m.role, content: m.content }));
         messagesFormatted.push({ role: 'user', content: mensaje });
 
-        const tools = [{
-            name: "guardar_stock",
-            description: "Guarda una cuenta con sus perfiles en Supabase. Si algún perfil ya está asignado a un cliente existente, lo guarda como 'ocupado'; de lo contrario, como 'disponible'.",
-            input_schema: {
-                type: "object",
-                properties: {
-                    plataforma: { type: "string", description: "Nombre de la plataforma (ej: Max, Netflix)" },
-                    correo: { type: "string", description: "Correo electrónico de la cuenta" },
-                    clave: { type: "string", description: "Contraseña de la cuenta" },
-                    perfiles: {
-                        type: "array",
-                        description: "Lista de perfiles que contiene la cuenta con su estado y opcionalmente el cliente asignado",
-                        items: {
-                            type: "object",
-                            properties: {
-                                perfil: { type: "string", description: "Nombre o número del perfil" },
-                                pin: { type: "string", description: "PIN de seguridad del perfil" },
-                                estado: { type: "string", enum: ["disponible", "ocupado"], description: "Estado del perfil" },
-                                telefono_cliente: { type: "string", description: "Teléfono del cliente si el perfil está ocupado" }
-                            },
-                            required: ["perfil", "estado"]
+        const tools = [
+            {
+                name: "guardar_stock",
+                description: "Guarda una cuenta con sus perfiles en Supabase.",
+                input_schema: {
+                    type: "object",
+                    properties: {
+                        plataforma: { type: "string" },
+                        correo: { type: "string" },
+                        clave: { type: "string" },
+                        perfiles: {
+                            type: "array",
+                            items: {
+                                type: "object",
+                                properties: {
+                                    perfil: { type: "string" },
+                                    pin: { type: "string" },
+                                    estado: { type: "string", enum: ["disponible", "ocupado"] },
+                                    telefono_cliente: { type: "string" }
+                                },
+                                required: ["perfil", "estado"]
+                            }
                         }
-                    }
-                },
-                required: ["plataforma", "correo", "clave", "perfiles"]
+                    },
+                    required: ["plataforma", "correo", "clave", "perfiles"]
+                }
+            },
+            {
+                name: "dar_cuenta",
+                description: "Busca automáticamente una cuenta disponible de la plataforma solicitada, la marca como 'ocupada' y la asigna a un cliente.",
+                input_schema: {
+                    type: "object",
+                    properties: {
+                        plataforma: { type: "string" },
+                        telefono_cliente: { type: "string" }
+                    },
+                    required: ["plataforma", "telefono_cliente"]
+                }
+            },
+            {
+                name: "actualizar_credenciales",
+                description: "Actualiza la contraseña o el PIN de una cuenta existente en el stock de Supabase.",
+                input_schema: {
+                    type: "object",
+                    properties: {
+                        correo: { type: "string", description: "Correo electrónico de la cuenta a modificar" },
+                        nueva_clave: { type: "string", description: "Nueva contraseña (opcional)" },
+                        nuevo_pin: { type: "string", description: "Nuevo PIN si aplica a un perfil específico (opcional)" },
+                        perfil: { type: "string", description: "Nombre del perfil si el cambio de PIN es específico (opcional)" }
+                    },
+                    required: ["correo"]
+                }
             }
-        }];
+        ];
 
         let response = await client.messages.create({
-            model: 'claude-3-5-sonnet-20241022', // <--- Actualizado al modelo vigente
+            model: 'claude-3-5-sonnet-20241022',
             max_tokens: 900,
             tools: tools,
-            system: SYSTEM_PROMPT + `\n\n[INFO INTERNA DEL PANEL WEB]: Estás conversando con RYAN (tu dueño).\n\n1. CLIENTES CARGADOS:\n${listaClientes}\n\n2. STOCK DISPONIBLE:\n${listaStock}\n\n3. HISTORIAL RECIENTE DE MENSAJES:\n${historialConversacion}\n\nCuando Ryan te pase una cuenta completa con sus perfiles, analizá si algún perfil ya pertenece a un cliente de la lista. Usá la herramienta 'guardar_stock' asignando estado 'ocupado' (con su teléfono correspondiente) a los que ya estén en uso, y 'disponible' a los libres.`,
+            system: SYSTEM_PROMPT + `\n\n[INFO INTERNA]: Estás conversando con RYAN o asistiendo a clientes.\n\n1. CLIENTES:\n${listaClientes}\n\n2. TODAS LAS CUENTAS (STOCK Y OCUPADAS):\n${listaStock}\n\n3. HISTORIAL:\n${historialConversacion}\n\n- Si te piden dar una cuenta, usá 'dar_cuenta'.\n- Si te pasan stock nuevo, usá 'guardar_stock'.\n- Si te piden cambiar una contraseña o PIN, o un cliente reporta que no le funciona la clave/PIN, usá 'actualizar_credenciales' para corregirlo en la base de datos automáticamente sin molestar a Ryan.`,
             messages: messagesFormatted
         });
 
         if (response.stop_reason === "tool_use") {
             const toolUseBlock = response.content.find(block => block.type === "tool_use");
-            if (toolUseBlock && toolUseBlock.name === "guardar_stock") {
-                const { plataforma, correo, clave, perfiles } = toolUseBlock.input;
-                const registrosAInsertar = perfiles.map(p => ({
-                    plataforma: plataforma,
-                    correo: correo,
-                    clave: clave || '',
-                    perfil: p.perfil || '',
-                    pin: p.pin || '',
-                    estado: p.estado || 'disponible',
-                    telefono: p.telefono_cliente || null
-                }));
-
-                const { error: insertError } = await supabase.from('CUENTAS').insert(registrosAInsertar);
-
+            if (toolUseBlock) {
                 let toolResultContent = "";
-                if (!insertError) {
-                    const ocupadosCount = registrosAInsertar.filter(r => r.estado === 'ocupado').length;
-                    const disponiblesCount = registrosAInsertar.filter(r => r.estado === 'disponible').length;
-                    toolResultContent = `Cuenta de ${plataforma} (${correo}) guardada con éxito: ${disponiblesCount} disponibles y ${ocupadosCount} ocupados vinculados.`;
-                } else {
-                    toolResultContent = `Error al guardar en Supabase: ${insertError.message}`;
+
+                if (toolUseBlock.name === "guardar_stock") {
+                    const { plataforma, correo, clave, perfiles } = toolUseBlock.input;
+                    const registrosAInsertar = perfiles.map(p => ({
+                        plataforma: plataforma,
+                        correo: correo,
+                        clave: clave || '',
+                        perfil: p.perfil || '',
+                        pin: p.pin || '',
+                        estado: p.estado || 'disponible',
+                        telefono: p.telefono_cliente || null
+                    }));
+
+                    const { error: insertError } = await supabase.from('CUENTAS').insert(registrosAInsertar);
+                    toolResultContent = !insertError ? `Cuenta guardada con éxito.` : `Error: ${insertError.message}`;
+                } 
+                else if (toolUseBlock.name === "dar_cuenta") {
+                    const { plataforma, telefono_cliente } = toolUseBlock.input;
+                    const cuentaLibre = stockDisp.find(s => s.plataforma.toLowerCase() === plataforma.toLowerCase());
+
+                    if (cuentaLibre) {
+                        const { error: updateError } = await supabase
+                            .from('CUENTAS')
+                            .update({ estado: 'ocupado', telefono: telefono_cliente })
+                            .eq('id', cuentaLibre.id);
+
+                        toolResultContent = !updateError ? `Cuenta ${cuentaLibre.plataforma} entregada con éxito.` : `Error: ${updateError.message}`;
+                    } else {
+                        toolResultContent = `No hay stock disponible de ${plataforma}.`;
+                    }
+                }
+                else if (toolUseBlock.name === "actualizar_credenciales") {
+                    const { correo, nueva_clave, nuevo_pin, perfil } = toolUseBlock.input;
+                    let updateData = {};
+                    if (nueva_clave) updateData.clave = nueva_clave;
+                    if (nuevo_pin) updateData.pin = nuevo_pin;
+
+                    let query = supabase.from('CUENTAS').update(updateData).eq('correo', correo);
+                    if (perfil) {
+                        query = query.eq('perfil', perfil);
+                    }
+
+                    const { error: updateError } = await query;
+                    toolResultContent = !updateError ? `Credenciales actualizadas correctamente para ${correo}.` : `Error al actualizar: ${updateError.message}`;
                 }
 
                 messagesFormatted.push({ role: 'assistant', content: response.content });
@@ -438,7 +490,7 @@ app.post('/api/chat-bot', async (req, res) => {
                 });
 
                 const finalResponse = await client.messages.create({
-                    model: 'claude-3-5-sonnet-20241022', // <--- Actualizado aquí también
+                    model: 'claude-3-5-sonnet-20241022',
                     max_tokens: 600,
                     tools: tools,
                     system: SYSTEM_PROMPT,
