@@ -363,54 +363,90 @@ app.post('/api/chat-bot', async (req, res) => {
             `[Tel: ${m.phone} | Rol: ${m.role}]: ${m.content}`
         ).join('\n') || 'No hay mensajes recientes en la base de datos.';
 
-        let accionRealizada = '';
-
-        if (mensaje.startsWith('!nuevostock ')) {
-            const partes = mensaje.replace('!nuevostock ', '').split('|').map(p => p.trim());
-            const plataforma = partes[0];
-            const correo = partes[1];
-            const clave = partes[2];
-            const perfilesData = partes.slice(3);
-
-            if (plataforma && correo && perfilesData.length > 0) {
-                const registrosAInsertar = [];
-
-                for (let item of perfilesData) {
-                    const subPartes = item.split(',').map(s => s.trim());
-                    const perfil = subPartes[0] || '';
-                    const pin = subPartes[1] || '';
-
-                    registrosAInsertar.push({
-                        plataforma: plataforma,
-                        correo: correo,
-                        clave: clave || '',
-                        perfil: perfil,
-                        pin: pin,
-                        estado: 'disponible'
-                    });
-                }
-
-                const { error: insertErrorStock } = await supabase.from('CUENTAS').insert(registrosAInsertar);
-
-                if (!insertErrorStock) {
-                    accionRealizada = `\n\n[ACCIÓN EJECUTADA]: Cuenta de ${plataforma} (${correo}) cargada exitosamente con ${registrosAInsertar.length} perfiles en la base de datos.`;
-                } else {
-                    accionRealizada = `\n\n[ERROR AL GUARDAR]: No se pudieron guardar los perfiles: ${insertErrorStock.message}`;
-                }
-            } else {
-                accionRealizada = `\n\n[ERROR]: Faltan datos obligatorios o el formato no es correcto. Usá: !nuevostock Plataforma | Correo | Clave | Perfil1,Pin1 | Perfil2,Pin2`;
-            }
-        }
-
         const messagesFormatted = (historial || []).map(m => ({ role: m.role, content: m.content }));
         messagesFormatted.push({ role: 'user', content: mensaje });
 
-        const response = await client.messages.create({
+        // Definimos la herramienta para que Claude pueda guardar stock automáticamente cuando se lo pidas conversando
+        const tools = [{
+            name: "guardar_stock",
+            description: "Guarda una o varias cuentas con sus perfiles en la base de datos de Supabase con estado disponible.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    plataforma: { type: "string", description: "Nombre de la plataforma (ej: Netflix, Disney, Max)" },
+                    correo: { type: "string", description: "Correo electrónico de la cuenta" },
+                    clave: { type: "string", description: "Contraseña de la cuenta" },
+                    perfiles: {
+                        type: "array",
+                        description: "Lista de perfiles que contiene la cuenta",
+                        items: {
+                            type: "object",
+                            properties: {
+                                perfil: { type: "string", description: "Nombre o número del perfil" },
+                                pin: { type: "string", description: "PIN de seguridad del perfil (opcional)" }
+                            },
+                            required: ["perfil"]
+                        }
+                    }
+                },
+                required: ["plataforma", "correo", "clave", "perfiles"]
+            }
+        }];
+
+        let response = await client.messages.create({
             model: 'claude-sonnet-4-6',
-            max_tokens: 600,
-            system: SYSTEM_PROMPT + `\n\n[INFO INTERNA DEL PANEL WEB]: Estás conversando con RYAN (tu dueño).\n\n1. CLIENTES CARGADOS:\n${listaClientes}\n\n2. STOCK DISPONIBLE:\n${listaStock}\n\n3. HISTORIAL RECIENTE DE MENSAJES:\n${historialConversacion}${accionRealizada}\n\nSi Ryan quiere cargar cuentas enteras con varios perfiles, recordale que use el comando: '!nuevostock Plataforma | Correo | Clave | Perfil 1,PIN | Perfil 2,PIN'.`,
+            max_tokens: 800,
+            tools: tools,
+            system: SYSTEM_PROMPT + `\n\n[INFO INTERNA DEL PANEL WEB]: Estás conversando con RYAN (tu dueño).\n\n1. CLIENTES CARGADOS:\n${listaClientes}\n\n2. STOCK DISPONIBLE:\n${listaStock}\n\n3. HISTORIAL RECIENTE DE MENSAJES:\n${historialConversacion}\n\nSi Ryan te pasa datos de cuentas de forma conversacional para que guardes en el stock, utilizá inmediatamente la herramienta 'guardar_stock' para registrarlas en Supabase y confirmale el éxito.`,
             messages: messagesFormatted
         });
+
+        // Si Claude decide invocar la herramienta para guardar stock
+        if (response.stop_reason === "tool_use") {
+            const toolUseBlock = response.content.find(block => block.type === "tool_use");
+            if (toolUseBlock && toolUseBlock.name === "guardar_stock") {
+                const { plataforma, correo, clave, perfiles } = toolUseBlock.input;
+                const registrosAInsertar = perfiles.map(p => ({
+                    plataforma: plataforma,
+                    correo: correo,
+                    clave: clave || '',
+                    perfil: p.perfil || '',
+                    pin: p.pin || '',
+                    estado: 'disponible'
+                }));
+
+                const { error: insertError } = await supabase.from('CUENTAS').insert(registrosAInsertar);
+
+                let toolResultContent = "";
+                if (!insertError) {
+                    toolResultContent = `Cuenta de ${plataforma} (${correo}) guardada exitosamente con ${registrosAInsertar.length} perfiles en Supabase.`;
+                } else {
+                    toolResultContent = `Error al guardar en Supabase: ${insertError.message}`;
+                }
+
+                // Devolvemos el resultado de la herramienta a Claude para que le responda a Ryan con naturalidad
+                messagesFormatted.push({ role: 'assistant', content: response.content });
+                messagesFormatted.push({
+                    role: 'user',
+                    content: [{
+                        type: 'tool_result',
+                        tool_use_id: toolUseBlock.id,
+                        content: toolResultContent
+                    }]
+                });
+
+                const finalResponse = await client.messages.create({
+                    model: 'claude-sonnet-4-6',
+                    max_tokens: 600,
+                    tools: tools,
+                    system: SYSTEM_PROMPT,
+                    messages: messagesFormatted
+                });
+
+                res.json({ success: true, reply: finalResponse.content[0].text });
+                return;
+            }
+        }
 
         res.json({ success: true, reply: response.content[0].text });
     } catch (e) {
