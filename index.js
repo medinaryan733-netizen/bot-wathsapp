@@ -366,26 +366,27 @@ app.post('/api/chat-bot', async (req, res) => {
         const messagesFormatted = (historial || []).map(m => ({ role: m.role, content: m.content }));
         messagesFormatted.push({ role: 'user', content: mensaje });
 
-        // Definimos la herramienta para que Claude pueda guardar stock automáticamente cuando se lo pidas conversando
         const tools = [{
             name: "guardar_stock",
-            description: "Guarda una o varias cuentas con sus perfiles en la base de datos de Supabase con estado disponible.",
+            description: "Guarda una cuenta con sus perfiles en Supabase. Si algún perfil ya está asignado a un cliente existente, lo guarda como 'ocupado'; de lo contrario, como 'disponible'.",
             input_schema: {
                 type: "object",
                 properties: {
-                    plataforma: { type: "string", description: "Nombre de la plataforma (ej: Netflix, Disney, Max)" },
+                    plataforma: { type: "string", description: "Nombre de la plataforma (ej: Max, Netflix)" },
                     correo: { type: "string", description: "Correo electrónico de la cuenta" },
                     clave: { type: "string", description: "Contraseña de la cuenta" },
                     perfiles: {
                         type: "array",
-                        description: "Lista de perfiles que contiene la cuenta",
+                        description: "Lista de perfiles que contiene la cuenta con su estado y opcionalmente el cliente asignado",
                         items: {
                             type: "object",
                             properties: {
                                 perfil: { type: "string", description: "Nombre o número del perfil" },
-                                pin: { type: "string", description: "PIN de seguridad del perfil (opcional)" }
+                                pin: { type: "string", description: "PIN de seguridad del perfil" },
+                                estado: { type: "string", enum: ["disponible", "ocupado"], description: "Estado del perfil" },
+                                telefono_cliente: { type: "string", description: "Teléfono del cliente si el perfil está ocupado" }
                             },
-                            required: ["perfil"]
+                            required: ["perfil", "estado"]
                         }
                     }
                 },
@@ -394,14 +395,13 @@ app.post('/api/chat-bot', async (req, res) => {
         }];
 
         let response = await client.messages.create({
-            model: 'claude-sonnet-4-6',
-            max_tokens: 800,
+            model: 'claude-3-5-sonnet-20241022', // <--- Actualizado al modelo vigente
+            max_tokens: 900,
             tools: tools,
-            system: SYSTEM_PROMPT + `\n\n[INFO INTERNA DEL PANEL WEB]: Estás conversando con RYAN (tu dueño).\n\n1. CLIENTES CARGADOS:\n${listaClientes}\n\n2. STOCK DISPONIBLE:\n${listaStock}\n\n3. HISTORIAL RECIENTE DE MENSAJES:\n${historialConversacion}\n\nSi Ryan te pasa datos de cuentas de forma conversacional para que guardes en el stock, utilizá inmediatamente la herramienta 'guardar_stock' para registrarlas en Supabase y confirmale el éxito.`,
+            system: SYSTEM_PROMPT + `\n\n[INFO INTERNA DEL PANEL WEB]: Estás conversando con RYAN (tu dueño).\n\n1. CLIENTES CARGADOS:\n${listaClientes}\n\n2. STOCK DISPONIBLE:\n${listaStock}\n\n3. HISTORIAL RECIENTE DE MENSAJES:\n${historialConversacion}\n\nCuando Ryan te pase una cuenta completa con sus perfiles, analizá si algún perfil ya pertenece a un cliente de la lista. Usá la herramienta 'guardar_stock' asignando estado 'ocupado' (con su teléfono correspondiente) a los que ya estén en uso, y 'disponible' a los libres.`,
             messages: messagesFormatted
         });
 
-        // Si Claude decide invocar la herramienta para guardar stock
         if (response.stop_reason === "tool_use") {
             const toolUseBlock = response.content.find(block => block.type === "tool_use");
             if (toolUseBlock && toolUseBlock.name === "guardar_stock") {
@@ -412,19 +412,21 @@ app.post('/api/chat-bot', async (req, res) => {
                     clave: clave || '',
                     perfil: p.perfil || '',
                     pin: p.pin || '',
-                    estado: 'disponible'
+                    estado: p.estado || 'disponible',
+                    telefono: p.telefono_cliente || null
                 }));
 
                 const { error: insertError } = await supabase.from('CUENTAS').insert(registrosAInsertar);
 
                 let toolResultContent = "";
                 if (!insertError) {
-                    toolResultContent = `Cuenta de ${plataforma} (${correo}) guardada exitosamente con ${registrosAInsertar.length} perfiles en Supabase.`;
+                    const ocupadosCount = registrosAInsertar.filter(r => r.estado === 'ocupado').length;
+                    const disponiblesCount = registrosAInsertar.filter(r => r.estado === 'disponible').length;
+                    toolResultContent = `Cuenta de ${plataforma} (${correo}) guardada con éxito: ${disponiblesCount} disponibles y ${ocupadosCount} ocupados vinculados.`;
                 } else {
                     toolResultContent = `Error al guardar en Supabase: ${insertError.message}`;
                 }
 
-                // Devolvemos el resultado de la herramienta a Claude para que le responda a Ryan con naturalidad
                 messagesFormatted.push({ role: 'assistant', content: response.content });
                 messagesFormatted.push({
                     role: 'user',
@@ -436,7 +438,7 @@ app.post('/api/chat-bot', async (req, res) => {
                 });
 
                 const finalResponse = await client.messages.create({
-                    model: 'claude-sonnet-4-6',
+                    model: 'claude-3-5-sonnet-20241022', // <--- Actualizado aquí también
                     max_tokens: 600,
                     tools: tools,
                     system: SYSTEM_PROMPT,
