@@ -401,8 +401,7 @@ app.post('/api/chat-bot', async (req, res) => {
                     accionRealizada = `\n\n[ERROR AL GUARDAR]: No se pudieron guardar los perfiles: ${insertError.message}`;
                 }
             } else {
-                accionRealizada = `\n\n[ERROR]: Faltan datos obligatorios...`. Usá: !nuevostock Plataforma | Correo | Clave | Perfil1,Pin1 | Perfil2,Pin2;
-            }
+               accionRealizada = `\n\n[ERROR]: Faltan datos obligatorios. Usá: !nuevostock Plataforma | Correo | Clave | Perfil1,Pin1 | Perfil2,Pin2`;
         }
         const messagesFormatted = (historial || []).map(m => ({ role: m.role, content: m.content }));
         messagesFormatted.push({ role: 'user', content: mensaje });
