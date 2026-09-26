@@ -514,15 +514,6 @@ app.post('/api/chat-bot', async (req, res) => {
         res.status(500).json({ success: false, error: e.message });
     }
 });
-        // Si no usó herramientas, devuelve la respuesta de texto normal de Claude
-        const textContent = response.content.find(block => block.type === 'text');
-        res.json({ success: true, reply: textContent ? textContent.text : 'Respuesta procesada.' });
-
-    } catch (e) {
-        console.error('Error crítico en /api/chat-bot:', e.message);
-        res.status(500).json({ success: false, error: e.message });
-    }
-});
 app.post('/api/agregar-stock', async (req, res) => {
     const { plataforma, correo, clave, password, perfil, pin } = req.body;
     const passValue = clave || password || '';
