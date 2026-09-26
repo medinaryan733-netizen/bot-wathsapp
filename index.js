@@ -421,7 +421,7 @@ app.post('/api/chat-bot', async (req, res) => {
         ];
 
         let response = await client.messages.create({
-            model: 'claude-3-5-sonnet-20241022',
+            model: 'claude-sonnet-4-6',
             max_tokens: 900,
             tools: tools,
             system: (typeof SYSTEM_PROMPT !== 'undefined' ? SYSTEM_PROMPT : 'Eres ALICE, un bot asistente de CRM y stock.') + `\n\n[INFO INTERNA]: Estás conversando con RYAN o asistiendo a clientes.\n\n1. CLIENTES:\n${listaClientes}\n\n2. TODAS LAS CUENTAS:\n${stockGeneral}\n\n3. HISTORIAL:\n${historialConversacion}\n\n- Si piden dar una cuenta, usá 'dar_cuenta'.\n- Si pasan stock nuevo, usá 'guardar_stock'.\n- Si piden cambiar claves o reportan fallos, usá 'actualizar_credenciales'.`,
@@ -494,7 +494,7 @@ app.post('/api/chat-bot', async (req, res) => {
                 });
 
                 const finalResponse = await client.messages.create({
-                    model: 'claude-3-5-sonnet-20241022',
+                    model: 'claude-sonnet-4-6',
                     max_tokens: 600,
                     tools: tools,
                     system: (typeof SYSTEM_PROMPT !== 'undefined' ? SYSTEM_PROMPT : 'Eres ALICE.'),
@@ -506,6 +506,14 @@ app.post('/api/chat-bot', async (req, res) => {
             }
         }
 
+        const textContent = response.content.find(block => block.type === 'text');
+        res.json({ success: true, reply: textContent ? textContent.text : 'Respuesta procesada.' });
+
+    } catch (e) {
+        console.error('Error crítico en /api/chat-bot:', e.message);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
         // Si no usó herramientas, devuelve la respuesta de texto normal de Claude
         const textContent = response.content.find(block => block.type === 'text');
         res.json({ success: true, reply: textContent ? textContent.text : 'Respuesta procesada.' });
