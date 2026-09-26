@@ -339,29 +339,9 @@ app.post('/api/enviar-mensaje-cliente', async (req, res) => {
 });
 
 app.post('/api/chat-bot', async (req, res) => {
-    // Obtenemos el mensaje, el historial y el teléfono del remitente que manda WhatsApp
     const { mensaje, historial, phone } = req.body; 
     
     try {
-        // 1. REGISTRO AUTOMÁTICO DE CLIENTES NUEVOS POR WHATSAPP
-        if (phone) {
-            const telefonoLimpio = String(phone).replace(/\D/g, ''); // Limpiamos formato
-            const { data: clienteExistente } = await supabase
-                .from('CLIENTES') // O tu tabla de clientes
-                .select('*')
-                .eq('telefono', telefonoLimpio)
-                .single();
-
-            if (!clienteExistente) {
-                // Si el número no existe en la base de datos, lo creamos automáticamente
-                await supabase.from('CLIENTES').insert({
-                    telefono: telefonoLimpio,
-                    nombre: `Cliente Ws (${telefonoLimpio.slice(-4)})`, // Nombre temporal identificable
-                    chances: 0
-                });
-            }
-        }
-
         const fullClientes = await fetchFullClientes();
         const { data: cuentasStock } = await supabase.from('CUENTAS').select('*');
         
@@ -387,6 +367,19 @@ app.post('/api/chat-bot', async (req, res) => {
         messagesFormatted.push({ role: 'user', content: mensaje });
 
         const tools = [
+            {
+                name: "guardar_cliente",
+                description: "Registra un nuevo cliente en la base de datos de Supabase.",
+                input_schema: {
+                    type: "object",
+                    properties: {
+                        nombre: { type: "string" },
+                        telefono: { type: "string" },
+                        chances: { type: "number" }
+                    },
+                    required: ["nombre", "telefono"]
+                }
+            },
             {
                 name: "guardar_stock",
                 description: "Guarda una cuenta con sus perfiles en Supabase.",
@@ -445,7 +438,7 @@ app.post('/api/chat-bot', async (req, res) => {
             model: 'claude-sonnet-4-6',
             max_tokens: 900,
             tools: tools,
-            system: (typeof SYSTEM_PROMPT !== 'undefined' ? SYSTEM_PROMPT : 'Eres ALICE, un bot asistente de CRM y stock.') + `\n\n[INFO INTERNA]: Estás conversando con RYAN o asistiendo a clientes.\n\n1. CLIENTES:\n${listaClientes}\n\n2. TODAS LAS CUENTAS:\n${stockGeneral}\n\n3. HISTORIAL:\n${historialConversacion}\n\n- Si piden dar una cuenta, usá 'dar_cuenta'.\n- Si pasan stock nuevo, usá 'guardar_stock'.\n- Si piden cambiar claves o reportan fallos, usá 'actualizar_credenciales'.`,
+            system: (typeof SYSTEM_PROMPT !== 'undefined' ? SYSTEM_PROMPT : 'Eres ALICE, un bot asistente de CRM y stock.') + `\n\n[INFO INTERNA]: Estás conversando con RYAN o asistiendo a clientes.\n\n1. CLIENTES:\n${listaClientes}\n\n2. TODAS LAS CUENTAS:\n${stockGeneral}\n\n3. HISTORIAL:\n${historialConversacion}\n\n- Si piden registrar un cliente nuevo, usá 'guardar_cliente'.\n- Si piden dar una cuenta, usá 'dar_cuenta'.\n- Si pasan stock nuevo, usá 'guardar_stock'.\n- Si piden cambiar claves o reportan fallos, usá 'actualizar_credenciales'.`,
             messages: messagesFormatted
         });
 
@@ -455,7 +448,16 @@ app.post('/api/chat-bot', async (req, res) => {
                 let toolResultContent = "";
 
                 try {
-                    if (toolUseBlock.name === "guardar_stock") {
+                    if (toolUseBlock.name === "guardar_cliente") {
+                        const { nombre, telefono, chances } = toolUseBlock.input;
+                        const { error: insertError } = await supabase.from('CLIENTES').insert({
+                            nombre: nombre,
+                            telefono: telefono,
+                            chances: chances || 0
+                        });
+                        toolResultContent = !insertError ? `Cliente ${nombre} guardado con éxito.` : `Error de Supabase: ${insertError.message}`;
+                    }
+                    else if (toolUseBlock.name === "guardar_stock") {
                         const { plataforma, correo, clave, perfiles } = toolUseBlock.input;
                         const registrosAInsertar = perfiles.map(p => ({
                             plataforma: plataforma,
