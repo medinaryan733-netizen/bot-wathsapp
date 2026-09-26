@@ -342,6 +342,10 @@ app.post('/api/chat-bot', async (req, res) => {
     const { mensaje, historial, phone } = req.body; 
     
     try {
+        // 1. Obtenemos instrucciones personalizadas guardadas en Supabase
+        const { data: dbInstrucciones } = await supabase.from('bot_instrucciones').select('instruccion');
+        const instruccionesExtra = dbInstrucciones?.map(i => `- ${i.instruccion}`).join('\n') || 'Ninguna instrucción adicional.';
+
         const fullClientes = await fetchFullClientes();
         const { data: cuentasStock } = await supabase.from('CUENTAS').select('*');
         
@@ -367,6 +371,17 @@ app.post('/api/chat-bot', async (req, res) => {
         messagesFormatted.push({ role: 'user', content: mensaje });
 
         const tools = [
+            {
+                name: "guardar_instruccion",
+                description: "Guarda una nueva regla, instrucción o comportamiento permanente para ALICE en la base de datos.",
+                input_schema: {
+                    type: "object",
+                    properties: {
+                        instruccion: { type: "string", description: "La regla o instrucción que ALICE debe recordar de ahora en adelante." }
+                    },
+                    required: ["instruccion"]
+                }
+            },
             {
                 name: "guardar_cliente",
                 description: "Registra un nuevo cliente en la base de datos de Supabase.",
@@ -438,7 +453,9 @@ app.post('/api/chat-bot', async (req, res) => {
             model: 'claude-sonnet-4-6',
             max_tokens: 900,
             tools: tools,
-            system: (typeof SYSTEM_PROMPT !== 'undefined' ? SYSTEM_PROMPT : 'Eres ALICE, un bot asistente de CRM y stock.') + `\n\n[INFO INTERNA]: Estás conversando con RYAN o asistiendo a clientes.\n\n1. CLIENTES:\n${listaClientes}\n\n2. TODAS LAS CUENTAS:\n${stockGeneral}\n\n3. HISTORIAL:\n${historialConversacion}\n\n- Si piden registrar un cliente nuevo, usá 'guardar_cliente'.\n- Si piden dar una cuenta, usá 'dar_cuenta'.\n- Si pasan stock nuevo, usá 'guardar_stock'.\n- Si piden cambiar claves o reportan fallos, usá 'actualizar_credenciales'.`,
+            system: (typeof SYSTEM_PROMPT !== 'undefined' ? SYSTEM_PROMPT : 'Eres ALICE, un bot asistente de CRM y stock.') + 
+                `\n\n[INSTRUCCIONES Y REGLAS APRENDIDAS DE RYAN]:\n${instruccionesExtra}\n\n` +
+                `[INFO INTERNA]: Estás conversando con RYAN o asistiendo a clientes.\n\n1. CLIENTES:\n${listaClientes}\n\n2. TODAS LAS CUENTAS:\n${stockGeneral}\n\n3. HISTORIAL:\n${historialConversacion}\n\n- Si Ryan te da una regla nueva o te pide recordar algo, usá 'guardar_instruccion'.\n- Si piden registrar un cliente nuevo, usá 'guardar_cliente'.\n- Si piden dar una cuenta, usá 'dar_cuenta'.\n- Si pasan stock nuevo, usá 'guardar_stock'.\n- Si piden cambiar claves o reportan fallos, usá 'actualizar_credenciales'.`,
             messages: messagesFormatted
         });
 
@@ -448,7 +465,12 @@ app.post('/api/chat-bot', async (req, res) => {
                 let toolResultContent = "";
 
                 try {
-                    if (toolUseBlock.name === "guardar_cliente") {
+                    if (toolUseBlock.name === "guardar_instruccion") {
+                        const { instruccion } = toolUseBlock.input;
+                        const { error: insertError } = await supabase.from('bot_instrucciones').insert({ instruccion });
+                        toolResultContent = !insertError ? `Instrucción guardada de forma permanente: "${instruccion}"` : `Error: ${insertError.message}`;
+                    }
+                    else if (toolUseBlock.name === "guardar_cliente") {
                         const { nombre, telefono, chances } = toolUseBlock.input;
                         const { error: insertError } = await supabase.from('CLIENTES').insert({
                             nombre: nombre,
@@ -520,7 +542,7 @@ app.post('/api/chat-bot', async (req, res) => {
                     model: 'claude-sonnet-4-6',
                     max_tokens: 600,
                     tools: tools,
-                    system: (typeof SYSTEM_PROMPT !== 'undefined' ? SYSTEM_PROMPT : 'Eres ALICE.'),
+                    system: (typeof SYSTEM_PROMPT !== 'undefined' ? SYSTEM_PROMPT : 'Eres ALICE.') + `\n\n[INSTRUCCIONES Y REGLAS APRENDIDAS]:\n${instruccionesExtra}`,
                     messages: messagesFormatted
                 });
 
