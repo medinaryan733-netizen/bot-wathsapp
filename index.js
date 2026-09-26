@@ -351,17 +351,17 @@ app.post('/api/chat-bot', async (req, res) => {
             .order('created_at', { ascending: false })
             .limit(30);
 
-        const listaClientes = fullClientes.map(c => 
-            • ${c.nombre} (+${c.telefono}) | Servicio: ${c.cuenta.plataforma || 'Sin asignación'} | Correo: ${c.cuenta.correo || '-'} | PIN: ${c.cuenta.pin || '-'} | Chances: ${c.chances}
+                const listaClientes = fullClientes.map(c => 
+            `• ${c.nombre} (+${c.telefono}) | Servicio: ${c.cuenta.plataforma || 'Sin asignación'} | Correo: ${c.cuenta.correo || '-'} | PIN: ${c.cuenta.pin || '-'} | Chances: ${c.chances}`
         ).join('\n') || 'No hay clientes registrados.';
 
-        const stockDisp = cuentasStock?.filter(s => String(s.est '').toLowerCase().trim() === 'disponible') ) || [];
+        const stockDisp = (cuentasStock || []).filter(s => String(s.estado || '').toLowerCase().trim() === 'disponible');
         const listaStock = stockDisp.map(s => 
-            • ${s.plataforma} | Correo: ${s.correo} | Clave: ${s.clave || '-'} | Perfil: ${s.perfil || '-'} | PIN: ${s.pin || '-'}
+            `• ${s.plataforma} | Correo: ${s.correo} | Clave: ${s.clave || '-'} | Perfil: ${s.perfil || '-'} | PIN: ${s.pin || '-'}`
         ).join('\n') || 'No hay stock disponible actualmente.';
 
         const historialConversacion = (ultimosMensajes || []).reverse().map(m => 
-            [Tel: ${m.phone} | Rol: ${m.role}]: ${m.content}
+            `[Tel: ${m.phone} | Rol: ${m.role}]: ${m.content}`
         ).join('\n') || 'No hay mensajes recientes en la base de datos.';
 
         let accionRealizada = '';
