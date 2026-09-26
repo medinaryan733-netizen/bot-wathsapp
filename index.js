@@ -354,10 +354,9 @@ app.post('/api/chat-bot', async (req, res) => {
             `• ${c.nombre} (+${c.telefono}) | Servicio: ${c.cuenta.plataforma || 'Sin asignación'} | Correo: ${c.cuenta.correo || '-'} | PIN: ${c.cuenta.pin || '-'} | Chances: ${c.chances}`
         ).join('\n') || 'No hay clientes registrados.';
 
-        const stockDisp = cuentasStock?.filter(s => String(s.estado || '').toLowerCase().trim() === 'disponible') || [];
-        const listaStock = stockDisp.map(s => 
+        const stockGeneral = cuentasStock?.map(s => 
             `• ID: ${s.id} | ${s.plataforma} | Correo: ${s.correo} | Clave: ${s.clave || '-'} | Perfil: ${s.perfil || '-'} | PIN: ${s.pin || '-'} | Estado: ${s.estado}`
-        ).join('\n') || 'No hay stock disponible actualmente.';
+        ).join('\n') || 'No hay cuentas registradas.';
 
         const historialConversacion = (ultimosMensajes || []).reverse().map(m => 
             `[Tel: ${m.phone} | Rol: ${m.role}]: ${m.content}`
@@ -411,10 +410,10 @@ app.post('/api/chat-bot', async (req, res) => {
                 input_schema: {
                     type: "object",
                     properties: {
-                        correo: { type: "string", description: "Correo electrónico de la cuenta a modificar" },
-                        nueva_clave: { type: "string", description: "Nueva contraseña (opcional)" },
-                        nuevo_pin: { type: "string", description: "Nuevo PIN si aplica a un perfil específico (opcional)" },
-                        perfil: { type: "string", description: "Nombre del perfil si el cambio de PIN es específico (opcional)" }
+                        correo: { type: "string" },
+                        nueva_clave: { type: "string" },
+                        nuevo_pin: { type: "string" },
+                        perfil: { type: "string" }
                     },
                     required: ["correo"]
                 }
@@ -425,7 +424,7 @@ app.post('/api/chat-bot', async (req, res) => {
             model: 'claude-3-5-sonnet-20241022',
             max_tokens: 900,
             tools: tools,
-            system: SYSTEM_PROMPT + `\n\n[INFO INTERNA]: Estás conversando con RYAN o asistiendo a clientes.\n\n1. CLIENTES:\n${listaClientes}\n\n2. TODAS LAS CUENTAS (STOCK Y OCUPADAS):\n${listaStock}\n\n3. HISTORIAL:\n${historialConversacion}\n\n- Si te piden dar una cuenta, usá 'dar_cuenta'.\n- Si te pasan stock nuevo, usá 'guardar_stock'.\n- Si te piden cambiar una contraseña o PIN, o un cliente reporta que no le funciona la clave/PIN, usá 'actualizar_credenciales' para corregirlo en la base de datos automáticamente sin molestar a Ryan.`,
+            system: (typeof SYSTEM_PROMPT !== 'undefined' ? SYSTEM_PROMPT : 'Eres ALICE, un bot asistente de CRM y stock.') + `\n\n[INFO INTERNA]: Estás conversando con RYAN o asistiendo a clientes.\n\n1. CLIENTES:\n${listaClientes}\n\n2. TODAS LAS CUENTAS:\n${stockGeneral}\n\n3. HISTORIAL:\n${historialConversacion}\n\n- Si piden dar una cuenta, usá 'dar_cuenta'.\n- Si pasan stock nuevo, usá 'guardar_stock'.\n- Si piden cambiar claves o reportan fallos, usá 'actualizar_credenciales'.`,
             messages: messagesFormatted
         });
 
@@ -434,49 +433,54 @@ app.post('/api/chat-bot', async (req, res) => {
             if (toolUseBlock) {
                 let toolResultContent = "";
 
-                if (toolUseBlock.name === "guardar_stock") {
-                    const { plataforma, correo, clave, perfiles } = toolUseBlock.input;
-                    const registrosAInsertar = perfiles.map(p => ({
-                        plataforma: plataforma,
-                        correo: correo,
-                        clave: clave || '',
-                        perfil: p.perfil || '',
-                        pin: p.pin || '',
-                        estado: p.estado || 'disponible',
-                        telefono: p.telefono_cliente || null
-                    }));
+                try {
+                    if (toolUseBlock.name === "guardar_stock") {
+                        const { plataforma, correo, clave, perfiles } = toolUseBlock.input;
+                        const registrosAInsertar = perfiles.map(p => ({
+                            plataforma: plataforma,
+                            correo: correo,
+                            clave: clave || '',
+                            perfil: p.perfil || '',
+                            pin: p.pin || '',
+                            estado: p.estado || 'disponible',
+                            telefono: p.telefono_cliente || null
+                        }));
 
-                    const { error: insertError } = await supabase.from('CUENTAS').insert(registrosAInsertar);
-                    toolResultContent = !insertError ? `Cuenta guardada con éxito.` : `Error: ${insertError.message}`;
-                } 
-                else if (toolUseBlock.name === "dar_cuenta") {
-                    const { plataforma, telefono_cliente } = toolUseBlock.input;
-                    const cuentaLibre = stockDisp.find(s => s.plataforma.toLowerCase() === plataforma.toLowerCase());
+                        const { error: insertError } = await supabase.from('CUENTAS').insert(registrosAInsertar);
+                        toolResultContent = !insertError ? `Cuenta guardada con éxito.` : `Error de Supabase: ${insertError.message}`;
+                    } 
+                    else if (toolUseBlock.name === "dar_cuenta") {
+                        const { plataforma, telefono_cliente } = toolUseBlock.input;
+                        const stockDisp = cuentasStock?.filter(s => String(s.estado || '').toLowerCase().trim() === 'disponible') || [];
+                        const cuentaLibre = stockDisp.find(s => s.plataforma.toLowerCase() === plataforma.toLowerCase());
 
-                    if (cuentaLibre) {
-                        const { error: updateError } = await supabase
-                            .from('CUENTAS')
-                            .update({ estado: 'ocupado', telefono: telefono_cliente })
-                            .eq('id', cuentaLibre.id);
+                        if (cuentaLibre) {
+                            const { error: updateError } = await supabase
+                                .from('CUENTAS')
+                                .update({ estado: 'ocupado', telefono: telefono_cliente })
+                                .eq('id', cuentaLibre.id);
 
-                        toolResultContent = !updateError ? `Cuenta ${cuentaLibre.plataforma} entregada con éxito.` : `Error: ${updateError.message}`;
-                    } else {
-                        toolResultContent = `No hay stock disponible de ${plataforma}.`;
+                            toolResultContent = !updateError ? `Cuenta ${cuentaLibre.plataforma} entregada con éxito.` : `Error: ${updateError.message}`;
+                        } else {
+                            toolResultContent = `No hay stock disponible de ${plataforma}.`;
+                        }
                     }
-                }
-                else if (toolUseBlock.name === "actualizar_credenciales") {
-                    const { correo, nueva_clave, nuevo_pin, perfil } = toolUseBlock.input;
-                    let updateData = {};
-                    if (nueva_clave) updateData.clave = nueva_clave;
-                    if (nuevo_pin) updateData.pin = nuevo_pin;
+                    else if (toolUseBlock.name === "actualizar_credenciales") {
+                        const { correo, nueva_clave, nuevo_pin, perfil } = toolUseBlock.input;
+                        let updateData = {};
+                        if (nueva_clave) updateData.clave = nueva_clave;
+                        if (nuevo_pin) updateData.pin = nuevo_pin;
 
-                    let query = supabase.from('CUENTAS').update(updateData).eq('correo', correo);
-                    if (perfil) {
-                        query = query.eq('perfil', perfil);
+                        let query = supabase.from('CUENTAS').update(updateData).eq('correo', correo);
+                        if (perfil) {
+                            query = query.eq('perfil', perfil);
+                        }
+
+                        const { error: updateError } = await query;
+                        toolResultContent = !updateError ? `Credenciales actualizadas para ${correo}.` : `Error: ${updateError.message}`;
                     }
-
-                    const { error: updateError } = await query;
-                    toolResultContent = !updateError ? `Credenciales actualizadas correctamente para ${correo}.` : `Error al actualizar: ${updateError.message}`;
+                } catch (toolErr) {
+                    toolResultContent = `Error ejecutando la herramienta: ${toolErr.message}`;
                 }
 
                 messagesFormatted.push({ role: 'assistant', content: response.content });
@@ -493,7 +497,7 @@ app.post('/api/chat-bot', async (req, res) => {
                     model: 'claude-3-5-sonnet-20241022',
                     max_tokens: 600,
                     tools: tools,
-                    system: SYSTEM_PROMPT,
+                    system: (typeof SYSTEM_PROMPT !== 'undefined' ? SYSTEM_PROMPT : 'Eres ALICE.'),
                     messages: messagesFormatted
                 });
 
@@ -502,9 +506,12 @@ app.post('/api/chat-bot', async (req, res) => {
             }
         }
 
-        res.json({ success: true, reply: response.content[0].text });
+        // Si no usó herramientas, devuelve la respuesta de texto normal de Claude
+        const textContent = response.content.find(block => block.type === 'text');
+        res.json({ success: true, reply: textContent ? textContent.text : 'Respuesta procesada.' });
+
     } catch (e) {
-        console.error('Error en /api/chat-bot:', e.message);
+        console.error('Error crítico en /api/chat-bot:', e.message);
         res.status(500).json({ success: false, error: e.message });
     }
 });
