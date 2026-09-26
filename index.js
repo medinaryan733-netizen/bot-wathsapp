@@ -344,18 +344,17 @@ app.post('/api/chat-bot', async (req, res) => {
         const fullClientes = await fetchFullClientes();
         const { data: cuentasStock } = await supabase.from('CUENTAS').select('*');
         
-        // Historial reciente de la tabla messages
         const { data: ultimosMensajes } = await supabase
             .from('messages')
             .select('*')
             .order('created_at', { ascending: false })
             .limit(30);
 
-                const listaClientes = fullClientes.map(c => 
+        const listaClientes = fullClientes.map(c => 
             `• ${c.nombre} (+${c.telefono}) | Servicio: ${c.cuenta.plataforma || 'Sin asignación'} | Correo: ${c.cuenta.correo || '-'} | PIN: ${c.cuenta.pin || '-'} | Chances: ${c.chances}`
         ).join('\n') || 'No hay clientes registrados.';
 
-        const stockDisp = (cuentasStock || []).filter(s => String(s.estado || '').toLowerCase().trim() === 'disponible');
+        const stockDisp = cuentasStock?.filter(s => String(s.estado || '').toLowerCase().trim() === 'disponible') || [];
         const listaStock = stockDisp.map(s => 
             `• ${s.plataforma} | Correo: ${s.correo} | Clave: ${s.clave || '-'} | Perfil: ${s.perfil || '-'} | PIN: ${s.pin || '-'}`
         ).join('\n') || 'No hay stock disponible actualmente.';
@@ -366,14 +365,12 @@ app.post('/api/chat-bot', async (req, res) => {
 
         let accionRealizada = '';
 
-        // Detectar si Ryan quiere guardar una cuenta múltiple con formato:
-        // !nuevostock plataforma | correo | clave | perfil1,pin1 | perfil2,pin2 | perfil3,pin3 ...
         if (mensaje.startsWith('!nuevostock ')) {
             const partes = mensaje.replace('!nuevostock ', '').split('|').map(p => p.trim());
             const plataforma = partes[0];
             const correo = partes[1];
             const clave = partes[2];
-            const perfilesData = partes.slice(3); // Todo lo que sigue son los perfiles con sus pines
+            const perfilesData = partes.slice(3);
 
             if (plataforma && correo && perfilesData.length > 0) {
                 const registrosAInsertar = [];
@@ -393,26 +390,25 @@ app.post('/api/chat-bot', async (req, res) => {
                     });
                 }
 
-                const { error: insertError } = await supabase.from('CUENTAS').insert(registrosAInsertar);
+                const { error: insertErrorStock } = await supabase.from('CUENTAS').insert(registrosAInsertar);
 
-                const { error: insertError } = await supabase.from('CUENTAS').insert(registrosAInsertar);
-
-                if (!insertError) {
+                if (!insertErrorStock) {
                     accionRealizada = `\n\n[ACCIÓN EJECUTADA]: Cuenta de ${plataforma} (${correo}) cargada exitosamente con ${registrosAInsertar.length} perfiles en la base de datos.`;
                 } else {
-                    accionRealizada = `\n\n[ERROR AL GUARDAR]: No se pudieron guardar los perfiles: ${insertError.message}`;
+                    accionRealizada = `\n\n[ERROR AL GUARDAR]: No se pudieron guardar los perfiles: ${insertErrorStock.message}`;
                 }
             } else {
                 accionRealizada = `\n\n[ERROR]: Faltan datos obligatorios o el formato no es correcto. Usá: !nuevostock Plataforma | Correo | Clave | Perfil1,Pin1 | Perfil2,Pin2`;
             }
+        }
+
         const messagesFormatted = (historial || []).map(m => ({ role: m.role, content: m.content }));
         messagesFormatted.push({ role: 'user', content: mensaje });
 
         const response = await client.messages.create({
             model: 'claude-sonnet-4-6',
             max_tokens: 600,
-            system: SYSTEM_PROMPT + `\n\n[INFO INTERNA DEL PANEL WEB]: Estás conversando con RYAN (tu dueño).\n\n1. CLIENTES CARGADOS:\n${listaClientes}\n\n2. STOCK DISPONIBLE:\n${listaStock}\n\n3.
-HISTORIAL RECIENTE DE MENSAJES:\n${historialConversacion}${accionRealizada}\n\nSi Ryan quiere cargar cuentas enteras con varios perfiles, recordale que use el comando: '!nuevostock Plataforma | Correo | Clave | Perfil 1,PIN | Perfil 2,PIN'.`,
+            system: SYSTEM_PROMPT + `\n\n[INFO INTERNA DEL PANEL WEB]: Estás conversando con RYAN (tu dueño).\n\n1. CLIENTES CARGADOS:\n${listaClientes}\n\n2. STOCK DISPONIBLE:\n${listaStock}\n\n3. HISTORIAL RECIENTE DE MENSAJES:\n${historialConversacion}${accionRealizada}\n\nSi Ryan quiere cargar cuentas enteras con varios perfiles, recordale que use el comando: '!nuevostock Plataforma | Correo | Clave | Perfil 1,PIN | Perfil 2,PIN'.`,
             messages: messagesFormatted
         });
 
