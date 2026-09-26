@@ -339,8 +339,29 @@ app.post('/api/enviar-mensaje-cliente', async (req, res) => {
 });
 
 app.post('/api/chat-bot', async (req, res) => {
-    const { mensaje, historial } = req.body;
+    // Obtenemos el mensaje, el historial y el teléfono del remitente que manda WhatsApp
+    const { mensaje, historial, phone } = req.body; 
+    
     try {
+        // 1. REGISTRO AUTOMÁTICO DE CLIENTES NUEVOS POR WHATSAPP
+        if (phone) {
+            const telefonoLimpio = String(phone).replace(/\D/g, ''); // Limpiamos formato
+            const { data: clienteExistente } = await supabase
+                .from('CLIENTES') // O tu tabla de clientes
+                .select('*')
+                .eq('telefono', telefonoLimpio)
+                .single();
+
+            if (!clienteExistente) {
+                // Si el número no existe en la base de datos, lo creamos automáticamente
+                await supabase.from('CLIENTES').insert({
+                    telefono: telefonoLimpio,
+                    nombre: `Cliente Ws (${telefonoLimpio.slice(-4)})`, // Nombre temporal identificable
+                    chances: 0
+                });
+            }
+        }
+
         const fullClientes = await fetchFullClientes();
         const { data: cuentasStock } = await supabase.from('CUENTAS').select('*');
         
