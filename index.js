@@ -919,6 +919,97 @@ app.get('/', (req, res) => {
                 }
 
                 for (const [plat, cuentas] of Object.entries(grupos)) {
+                    let rowsHtml = cuentas.map(s => `
+                        <tr>
+                            <td>${s.correo} / ${s.clave || '-'}</td>
+                            <td>Perfil: ${s.perfil || '-'} / PIN: ${s.pin || '-'}</td>
+                            <td>${String(s.estado).toLowerCase() === 'disponible' ? '🟢 Disponible' : '🔴 Ocupado'}</td>
+                            <td>${s.cliente_id ? 'Asignado (ID: ' + s.cliente_id + ')' : 'Libre'}</td>
+                            <td>
+                                <!-- NUEVOS BOTONES DE ACCIÓN PARA STOCK -->
+                                <button class="btn-edit" style="margin-bottom: 5px;" onclick="editarStockRapido('${s.id}', '${s.clave || ''}', '${s.pin || ''}')">✏️ Editar</button>
+                                <button class="btn-danger" onclick="eliminarStockRapido('${s.id}')">🗑️ Eliminar</button>
+                            </td>
+                        </tr>
+                    `).join('');
+
+                    contenedor.innerHTML += `
+                        <h4 class="stock-section-title">📺 ${plat} (${cuentas.length} cuentas)</h4>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Correo / Clave</th>
+                                    <th>Perfil / PIN</th>
+                                    <th>Estado</th>
+                                    <th>Asignado a</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>${rowsHtml}</tbody>
+                        </table>
+                    `;
+                }
+            }
+
+            // ==========================================
+            // NUEVAS FUNCIONES PARA LOS BOTONES DE STOCK
+            // ==========================================
+            async function eliminarStockRapido(id) {
+                if(confirm("⚠️ ¿Seguro que deseas eliminar esta cuenta del stock?")) {
+                    try {
+                        const res = await fetch('/api/cuentas/' + id, { method: 'DELETE' });
+                        const data = await res.json();
+                        if (data.success) {
+                            alert("✅ Cuenta eliminada del stock.");
+                            loadDashboardData();
+                        } else {
+                            alert("❌ Error: " + data.error);
+                        }
+                    } catch(e) {
+                        alert("❌ Error de conexión: " + e.message);
+                    }
+                }
+            }
+
+            async function editarStockRapido(id, claveActual, pinActual) {
+                const nuevaClave = prompt("Ingresá la nueva CLAVE (dejá igual si no cambia):", claveActual);
+                if (nuevaClave === null) return; 
+
+                const nuevoPin = prompt("Ingresá el nuevo PIN (dejá igual si no cambia):", pinActual);
+                if (nuevoPin === null) return;
+
+                try {
+                    const res = await fetch('/api/cuentas/' + id, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ clave: nuevaClave, pin: nuevoPin })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        alert("✅ ¡Cuenta actualizada!");
+                        loadDashboardData();
+                    } else {
+                        alert("❌ Error al editar: " + data.error);
+                    }
+                } catch(e) {
+                    alert("❌ Error de conexión: " + e.message);
+                }
+            }
+
+                // Agrupar por plataforma
+                const grupos = {};
+                lista.forEach(s => {
+                    const plat = (s.plataforma || 'General').trim();
+                    if (!grupos[plat]) grupos[plat] = [];
+                    grupos[plat].push(s);
+                });
+
+                if (Object.keys(grupos).length === 0) {
+                    contenedor.innerHTML = '<p style="color:var(--muted); padding:10px;">No hay cuentas en el inventario.</p>';
+                    return;
+                }
+
+                for (const [plat, cuentas] of Object.entries(grupos)) {
                     let rowsHtml = cuentas.map(s => \`
                         <tr>
                             <td>\${s.correo} / \${s.clave || '-'}</td>
