@@ -516,6 +516,20 @@ app.post('/api/chat-bot', async (req, res) => {
         res.status(500).json({ success: false, error: e.message });
     }
 });
+app.get('/api/historial-panel', async (req, res) => {
+    try {
+        const { data: mensajes } = await supabase
+            .from('messages')
+            .select('*')
+            .eq('phone', 'PanelWeb')
+            .order('created_at', { ascending: true }) // De más viejo a más nuevo para el chat
+            .limit(50);
+            
+        res.json({ success: true, mensajes: mensajes || [] });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
 // ==========================================
 // RUTAS PARA EL PANEL WEB (BOTONES FÍSICOS)
 // ==========================================
