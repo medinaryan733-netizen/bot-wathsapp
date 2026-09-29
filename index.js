@@ -340,17 +340,17 @@ app.post('/api/enviar-mensaje-cliente', async (req, res) => {
 
 app.post('/api/chat-bot', async (req, res) => {
     const { mensaje, historial, phone } = req.body; 
-    const remitente = phone || 'PanelWeb'; // Identificador clave para no perder la memoria del panel
+    const remitente = phone || 'PanelWeb'; 
     
     try {
-        // 1. GUARDAMOS TU MENSAJE EN SUPABASE (Para que no lo olvide al actualizar la página)
+        // 1. GUARDAMOS EL MENSAJE EN SUPABASE (Memoria)
         await supabase.from('messages').insert({
             phone: remitente,
             role: 'user',
             content: mensaje
         });
 
-        // 2. REGISTRO AUTOMÁTICO SI VIENE DE WHATSAPP
+        // 2. REGISTRO AUTOMÁTICO Y AVISO A RYAN
         if (phone && phone !== 'PanelWeb') {
             const telefonoLimpio = String(phone).replace(/\D/g, '');
             const { data: clienteExistente } = await supabase
@@ -360,22 +360,29 @@ app.post('/api/chat-bot', async (req, res) => {
                 .single();
 
             if (!clienteExistente) {
+                // Guarda al cliente
                 await supabase.from('CLIENTES').insert({
                     telefono: telefonoLimpio,
                     nombre: `Cliente Ws (${telefonoLimpio.slice(-4)})`,
                     chances: 0
                 });
+
+                // 🚨 NUEVO: DEJA UN MENSAJE EN EL PANEL WEB PARA QUE RYAN LO VEA
+                await supabase.from('messages').insert({
+                    phone: 'PanelWeb',
+                    role: 'assistant',
+                    content: `🚨 **[AVISO AUTOMÁTICO]**: Ryan, acabo de registrar en la base de datos a un cliente nuevo que nos habló por WhatsApp (Tel: +${telefonoLimpio}).`
+                });
             }
         }
 
-        // 3. CARGAMOS INSTRUCCIONES Y MEMORIA DESDE LA BASE DE DATOS
+        // 3. CARGAMOS INSTRUCCIONES Y MEMORIA 
         const { data: dbInstrucciones } = await supabase.from('bot_instrucciones').select('instruccion');
         const instruccionesExtra = dbInstrucciones?.map(i => `- ${i.instruccion}`).join('\n') || 'Ninguna instrucción adicional.';
 
         const fullClientes = await fetchFullClientes();
         const { data: cuentasStock } = await supabase.from('CUENTAS').select('*');
         
-        // TRAEMOS EL HISTORIAL REAL DE SUPABASE PARA QUE NO PIERDA EL HILO
         const { data: ultimosMensajes } = await supabase
             .from('messages')
             .select('*')
@@ -398,33 +405,12 @@ app.post('/api/chat-bot', async (req, res) => {
         const messagesFormatted = (historial && historial.length > 0) ? historial.map(m => ({ role: m.role, content: m.content })) : [];
         messagesFormatted.push({ role: 'user', content: mensaje });
 
-        // TODAS LAS HERRAMIENTAS ACTIVAS PARA ALICE
         const tools = [
-            {
-                name: "guardar_instruccion",
-                description: "Guarda una nueva regla, instrucción o comportamiento permanente para ALICE.",
-                input_schema: { type: "object", properties: { instruccion: { type: "string" } }, required: ["instruccion"] }
-            },
-            {
-                name: "guardar_cliente",
-                description: "Registra un nuevo cliente en Supabase.",
-                input_schema: { type: "object", properties: { nombre: { type: "string" }, telefono: { type: "string" }, chances: { type: "number" } }, required: ["nombre", "telefono"] }
-            },
-            {
-                name: "guardar_stock",
-                description: "Guarda una cuenta con sus perfiles en Supabase.",
-                input_schema: { type: "object", properties: { plataforma: { type: "string" }, correo: { type: "string" }, clave: { type: "string" }, perfiles: { type: "array", items: { type: "object", properties: { perfil: { type: "string" }, pin: { type: "string" }, estado: { type: "string", enum: ["disponible", "ocupado"] }, telefono_cliente: { type: "string" } }, required: ["perfil", "estado"] } } }, required: ["plataforma", "correo", "clave", "perfiles"] }
-            },
-            {
-                name: "dar_cuenta",
-                description: "Busca automáticamente una cuenta disponible de la plataforma solicitada, la marca como 'ocupada' y la asigna a un cliente.",
-                input_schema: { type: "object", properties: { plataforma: { type: "string" }, telefono_cliente: { type: "string" } }, required: ["plataforma", "telefono_cliente"] }
-            },
-            {
-                name: "actualizar_credenciales",
-                description: "Actualiza la contraseña o el PIN de una cuenta existente en el stock.",
-                input_schema: { type: "object", properties: { correo: { type: "string" }, nueva_clave: { type: "string" }, nuevo_pin: { type: "string" }, perfil: { type: "string" } }, required: ["correo"] }
-            }
+            { name: "guardar_instruccion", description: "Guarda una nueva regla para ALICE.", input_schema: { type: "object", properties: { instruccion: { type: "string" } }, required: ["instruccion"] } },
+            { name: "guardar_cliente", description: "Registra un cliente manualmente.", input_schema: { type: "object", properties: { nombre: { type: "string" }, telefono: { type: "string" }, chances: { type: "number" } }, required: ["nombre", "telefono"] } },
+            { name: "guardar_stock", description: "Guarda cuentas nuevas.", input_schema: { type: "object", properties: { plataforma: { type: "string" }, correo: { type: "string" }, clave: { type: "string" }, perfiles: { type: "array", items: { type: "object", properties: { perfil: { type: "string" }, pin: { type: "string" }, estado: { type: "string", enum: ["disponible", "ocupado"] }, telefono_cliente: { type: "string" } }, required: ["perfil", "estado"] } } }, required: ["plataforma", "correo", "clave", "perfiles"] } },
+            { name: "dar_cuenta", description: "Busca y asigna una cuenta libre.", input_schema: { type: "object", properties: { plataforma: { type: "string" }, telefono_cliente: { type: "string" } }, required: ["plataforma", "telefono_cliente"] } },
+            { name: "actualizar_credenciales", description: "Edita clave/PIN.", input_schema: { type: "object", properties: { correo: { type: "string" }, nueva_clave: { type: "string" }, nuevo_pin: { type: "string" }, perfil: { type: "string" } }, required: ["correo"] } }
         ];
 
         let response = await client.messages.create({
@@ -433,7 +419,7 @@ app.post('/api/chat-bot', async (req, res) => {
             tools: tools,
             system: (typeof SYSTEM_PROMPT !== 'undefined' ? SYSTEM_PROMPT : 'Eres ALICE, un bot asistente.') + 
                 `\n\n[INSTRUCCIONES PERMANENTES]:\n${instruccionesExtra}\n\n` +
-                `[INFO INTERNA]:\n1. CLIENTES:\n${listaClientes}\n\n2. TODAS LAS CUENTAS:\n${stockGeneral}\n\n3. HISTORIAL DE ESTE CHAT:\n${historialConversacion}\n\n- Usá SIEMPRE las herramientas cuando te pidan agregar un cliente, editar stock, dar cuenta o recordar algo.`,
+                `[INFO INTERNA]:\n1. CLIENTES:\n${listaClientes}\n\n2. TODAS LAS CUENTAS:\n${stockGeneral}\n\n3. HISTORIAL DE ESTE CHAT:\n${historialConversacion}`,
             messages: messagesFormatted
         });
 
@@ -453,9 +439,10 @@ app.post('/api/chat-bot', async (req, res) => {
                     else if (toolUseBlock.name === "guardar_cliente") {
                         const { nombre, telefono, chances } = toolUseBlock.input;
                         const { error } = await supabase.from('CLIENTES').insert({ nombre, telefono, chances: chances || 0 });
-                        toolResultContent = !error ? `Cliente ${nombre} guardado.` : `Error de Supabase: ${error.message}`;
+                        toolResultContent = !error ? `Cliente ${nombre} guardado.` : `Error: ${error.message}`;
                     }
                     else if (toolUseBlock.name === "guardar_stock") {
+                        // (Misma lógica de guardado de stock)
                         const { plataforma, correo, clave, perfiles } = toolUseBlock.input;
                         const registros = perfiles.map(p => ({ plataforma, correo, clave: clave || '', perfil: p.perfil || '', pin: p.pin || '', estado: p.estado || 'disponible', telefono: p.telefono_cliente || null }));
                         const { error } = await supabase.from('CUENTAS').insert(registros);
@@ -478,22 +465,26 @@ app.post('/api/chat-bot', async (req, res) => {
                         let updateData = {};
                         if (nueva_clave) updateData.clave = nueva_clave;
                         if (nuevo_pin) updateData.pin = nuevo_pin;
-
                         let query = supabase.from('CUENTAS').update(updateData).eq('correo', correo);
                         if (perfil) query = query.eq('perfil', perfil);
-
                         const { error } = await query;
-                        toolResultContent = !error ? `Credenciales actualizadas para ${correo}.` : `Error: ${error.message}`;
+                        toolResultContent = !error ? `Credenciales actualizadas.` : `Error: ${error.message}`;
                     }
                 } catch (toolErr) {
                     toolResultContent = `Error en herramienta: ${toolErr.message}`;
                 }
 
+                // 🚨 NUEVO: SI ESTÁ HABLANDO POR WHATSAPP Y USA UNA HERRAMIENTA, TE DEJA UN REPORTE EN EL PANEL
+                if (phone && phone !== 'PanelWeb') {
+                    await supabase.from('messages').insert({
+                        phone: 'PanelWeb',
+                        role: 'assistant',
+                        content: `🚨 **[REPORTE DE ALICE]**: Acabo de usar la acción '${toolUseBlock.name}' para el número +${phone}.\n📝 Resultado: ${toolResultContent}`
+                    });
+                }
+
                 messagesFormatted.push({ role: 'assistant', content: response.content });
-                messagesFormatted.push({
-                    role: 'user',
-                    content: [{ type: 'tool_result', tool_use_id: toolUseBlock.id, content: toolResultContent }]
-                });
+                messagesFormatted.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUseBlock.id, content: toolResultContent }] });
 
                 const finalResponse = await client.messages.create({
                     model: 'claude-sonnet-4-6',
@@ -511,7 +502,7 @@ app.post('/api/chat-bot', async (req, res) => {
             replyText = textBlock ? textBlock.text : 'Respuesta procesada.';
         }
 
-        // 4. GUARDAMOS LA RESPUESTA DE ALICE PARA COMPLETAR LA MEMORIA
+        // 4. GUARDAMOS LA RESPUESTA PARA EL CLIENTE/PANEL
         await supabase.from('messages').insert({
             phone: remitente,
             role: 'assistant',
