@@ -594,6 +594,7 @@ app.post('/api/control-bot', async (req, res) => {
 });
 
 // ==========================================
+// ==========================================
 // INTERFAZ GRÁFICA DEL PANEL WEB
 // ==========================================
 app.get('/', (req, res) => {
@@ -640,7 +641,7 @@ app.get('/', (req, res) => {
             h4.stock-section-title { color: var(--accent); margin-top: 20px; margin-bottom: 5px; border-left: 4px solid var(--accent); padding-left: 10px; }
 
             .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 100; justify-content: center; align-items: center; }
-            .modal-box { background: var(--card); padding: 25px; border-radius: 12px; max-width: 500px; width: 90%; border: 1px solid var(--border); }
+            .modal-box { background: var(--card); padding: 25px; border-radius: 12px; max-width: 500px; width: 90%; border: 1px solid var(--border); overflow-y: auto; max-height: 90vh; }
 
             .chat-container { display: flex; flex-direction: column; height: 400px; background: #0f172a; border-radius: 8px; border: 1px solid var(--border); padding: 15px; }
             .chat-messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
@@ -853,7 +854,7 @@ app.get('/', (req, res) => {
                 document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
                 document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
                 document.getElementById(tabId).classList.add('active');
-                event.target.classList.add('active');
+                if (event) event.target.classList.add('active');
             }
 
             async function loadDashboardData() {
@@ -880,32 +881,29 @@ app.get('/', (req, res) => {
                 lista.forEach((c, index) => {
                     const cuenta = c.cuenta || {};
                     const mailPass = (cuenta.correo || cuenta.clave) 
-                        ? \`\${cuenta.correo || '-'} / \${cuenta.clave || '-'} / P:\${cuenta.perfil || '-'} (PIN:\${cuenta.pin || '-'})\` 
+                        ? cuenta.correo + " / " + (cuenta.clave || "-") + " / P:" + (cuenta.perfil || "-") + " (PIN:" + (cuenta.pin || "-") + ")" 
                         : 'Sin datos';
-                    tbody.innerHTML += \`
-                        <tr>
-                            <td><strong>\${c.nombre}</strong></td>
-                            <td>+\${c.telefono}</td>
-                            <td>\${cuenta.plataforma || 'Sin servicio'}</td>
-                            <td><small>\${mailPass}</small></td>
-                            <td><strong>\${c.chances || 0} 🎟️</strong></td>
-                            <td>\${cuenta.fecha_vencimiento || '-'}</td>
-                            <td>
-                                <button class="btn-edit" onclick="openEditModal(\${index})">✏️ Editar</button>
-                                <button class="btn-msg" onclick="openMsgModal(\${index})">💬 Mensaje</button>
-                                <button class="btn-danger" onclick="eliminarCliente(\${c.id})">🗑️</button>
-                            </td>
-                        </tr>
-                    \`;
+                    
+                    tbody.innerHTML += "<tr>" +
+                        "<td><strong>" + c.nombre + "</strong></td>" +
+                        "<td>+" + c.telefono + "</td>" +
+                        "<td>" + (cuenta.plataforma || 'Sin servicio') + "</td>" +
+                        "<td><small>" + mailPass + "</small></td>" +
+                        "<td><strong>" + (c.chances || 0) + " 🎟️</strong></td>" +
+                        "<td>" + (cuenta.fecha_vencimiento || '-') + "</td>" +
+                        "<td>" +
+                            "<button class='btn-edit' onclick='openEditModal(" + index + ")'>✏️ Editar</button>" +
+                            "<button class='btn-msg' onclick='openMsgModal(" + index + ")'>💬 Mensaje</button>" +
+                            "<button class='btn-danger' onclick='eliminarCliente(" + c.id + ")'>🗑️</button>" +
+                        "</td>" +
+                    "</tr>";
                 });
             }
 
-                // RENDERIZAR STOCK SEPARADO POR PLATAFORMAS
             function renderStockPorServicios(lista) {
                 const contenedor = document.getElementById('contenedorStockPorServicio');
                 contenedor.innerHTML = '';
 
-                // Agrupar por plataforma
                 const grupos = {};
                 lista.forEach(s => {
                     const plat = (s.plataforma || 'General').trim();
@@ -919,40 +917,29 @@ app.get('/', (req, res) => {
                 }
 
                 for (const [plat, cuentas] of Object.entries(grupos)) {
-                    let rowsHtml = cuentas.map(s => \`
-                        <tr>
-                            <td>\${s.correo} / \${s.clave || '-'}</td>
-                            <td>Perfil: \${s.perfil || '-'} / PIN: \${s.pin || '-'}</td>
-                            <td>\${String(s.estado).toLowerCase() === 'disponible' ? '🟢 Disponible' : '🔴 Ocupado'}</td>
-                            <td>\${s.cliente_id ? 'Asignado (ID: ' + s.cliente_id + ')' : 'Libre'}</td>
-                            <td>
-                                <button class="btn-edit" style="margin-bottom: 5px;" onclick="editarStockRapido('\${s.id}', '\${s.clave || ''}', '\${s.pin || ''}')">✏️️ Editar</button>
-                                <button class="btn-danger" onclick="eliminarStockRapido('\${s.id}')">🗑️ Eliminar</button>
-                            </td>
-                        </tr>
-                    \`).join('');
+                    let rowsHtml = '';
+                    
+                    cuentas.forEach(s => {
+                        let status = String(s.estado).toLowerCase() === 'disponible' ? '🟢 Disponible' : '🔴 Ocupado';
+                        let asig = s.cliente_id ? 'Asignado (ID: ' + s.cliente_id + ')' : 'Libre';
+                        
+                        rowsHtml += "<tr>" +
+                            "<td>" + s.correo + " / " + (s.clave || "-") + "</td>" +
+                            "<td>Perfil: " + (s.perfil || "-") + " / PIN: " + (s.pin || "-") + "</td>" +
+                            "<td>" + status + "</td>" +
+                            "<td>" + asig + "</td>" +
+                            "<td>" +
+                                "<button class='btn-edit' style='margin-bottom: 5px;' onclick='editarStockRapido(\\"" + s.id + "\\", \\"" + (s.clave || "") + "\\", \\"" + (s.pin || "") + "\\")'>✏️ Editar</button>" +
+                                "<button class='btn-danger' onclick='eliminarStockRapido(\\"" + s.id + "\\")'>🗑️ Eliminar</button>" +
+                            "</td>" +
+                        "</tr>";
+                    });
 
-                    contenedor.innerHTML += \`
-                        <h4 class="stock-section-title">📺 \${plat} (\${cuentas.length} cuentas)</h4>
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Correo / Clave</th>
-                                    <th>Perfil / PIN</th>
-                                    <th>Estado</th>
-                                    <th>Asignado a</th>
-                                    <th>Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody>\${rowsHtml}</tbody>
-                        </table>
-                    \`;
+                    contenedor.innerHTML += "<h4 class='stock-section-title'>📺 " + plat + " (" + cuentas.length + " cuentas)</h4>" +
+                        "<table><thead><tr><th>Correo / Clave</th><th>Perfil / PIN</th><th>Estado</th><th>Asignado a</th><th>Acciones</th></tr></thead><tbody>" + rowsHtml + "</tbody></table>";
                 }
             }
 
-            // ==========================================
-            // NUEVAS FUNCIONES PARA LOS BOTONES DE STOCK
-            // ==========================================
             async function eliminarStockRapido(id) {
                 if(confirm("⚠️ ¿Seguro que deseas eliminar esta cuenta del stock?")) {
                     try {
@@ -992,46 +979,6 @@ app.get('/', (req, res) => {
                     }
                 } catch(e) {
                     alert("❌ Error de conexión: " + e.message);
-                }
-            }
-
-                // Agrupar por plataforma
-                const grupos = {};
-                lista.forEach(s => {
-                    const plat = (s.plataforma || 'General').trim();
-                    if (!grupos[plat]) grupos[plat] = [];
-                    grupos[plat].push(s);
-                });
-
-                if (Object.keys(grupos).length === 0) {
-                    contenedor.innerHTML = '<p style="color:var(--muted); padding:10px;">No hay cuentas en el inventario.</p>';
-                    return;
-                }
-
-                for (const [plat, cuentas] of Object.entries(grupos)) {
-                    let rowsHtml = cuentas.map(s => \`
-                        <tr>
-                            <td>\${s.correo} / \${s.clave || '-'}</td>
-                            <td>Perfil: \${s.perfil || '-'} / PIN: \${s.pin || '-'}</td>
-                            <td>\${String(s.estado).toLowerCase() === 'disponible' ? '🟢 Disponible' : '🔴 Ocupado'}</td>
-                            <td>\${s.cliente_id ? 'Asignado (ID: ' + s.cliente_id + ')' : 'Libre'}</td>
-                        </tr>
-                    \`).join('');
-
-                    contenedor.innerHTML += \`
-                        <h4 class="stock-section-title">📺 \${plat} (\${cuentas.length} cuentas)</h4>
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Correo / Clave</th>
-                                    <th>Perfil / PIN</th>
-                                    <th>Estado</th>
-                                    <th>Asignado a</th>
-                                </tr>
-                            </thead>
-                            <tbody>\${rowsHtml}</tbody>
-                        </table>
-                    \`;
                 }
             }
 
@@ -1111,7 +1058,7 @@ app.get('/', (req, res) => {
                 const clientObj = localClientes[index];
                 if (!clientObj) return;
                 document.getElementById('msgTelTarget').value = clientObj.telefono;
-                document.getElementById('lblMsgDestinatario').textContent = \`Para: \${clientObj.nombre} (+\${clientObj.telefono})\`;
+                document.getElementById('lblMsgDestinatario').textContent = "Para: " + clientObj.nombre + " (+" + clientObj.telefono + ")";
                 document.getElementById('txtMsgContent').value = '';
                 document.getElementById('msgModal').style.display = 'flex';
             }
@@ -1143,7 +1090,7 @@ app.get('/', (req, res) => {
                 if (!text) return;
 
                 const chatBox = document.getElementById('chatMessages');
-                chatBox.innerHTML += \`<div class="chat-msg user">\${text}</div>\`;
+                chatBox.innerHTML += "<div class='chat-msg user'>" + text + "</div>";
                 input.value = '';
                 chatBox.scrollTop = chatBox.scrollHeight;
 
@@ -1157,7 +1104,7 @@ app.get('/', (req, res) => {
                 if (data.success) {
                     webChatHistory.push({ role: 'user', content: text });
                     webChatHistory.push({ role: 'assistant', content: data.reply });
-                    chatBox.innerHTML += \`<div class="chat-msg bot">\${data.reply}</div>\`;
+                    chatBox.innerHTML += "<div class='chat-msg bot'>" + data.reply + "</div>";
                     chatBox.scrollTop = chatBox.scrollHeight;
                 }
             }
