@@ -900,7 +900,7 @@ app.get('/', (req, res) => {
                 });
             }
 
-            // RENDERIZAR STOCK SEPARADO POR PLATAFORMAS
+                // RENDERIZAR STOCK SEPARADO POR PLATAFORMAS
             function renderStockPorServicios(lista) {
                 const contenedor = document.getElementById('contenedorStockPorServicio');
                 contenedor.innerHTML = '';
@@ -919,22 +919,21 @@ app.get('/', (req, res) => {
                 }
 
                 for (const [plat, cuentas] of Object.entries(grupos)) {
-                    let rowsHtml = cuentas.map(s => `
+                    let rowsHtml = cuentas.map(s => \`
                         <tr>
-                            <td>${s.correo} / ${s.clave || '-'}</td>
-                            <td>Perfil: ${s.perfil || '-'} / PIN: ${s.pin || '-'}</td>
-                            <td>${String(s.estado).toLowerCase() === 'disponible' ? '🟢 Disponible' : '🔴 Ocupado'}</td>
-                            <td>${s.cliente_id ? 'Asignado (ID: ' + s.cliente_id + ')' : 'Libre'}</td>
+                            <td>\${s.correo} / \${s.clave || '-'}</td>
+                            <td>Perfil: \${s.perfil || '-'} / PIN: \${s.pin || '-'}</td>
+                            <td>\${String(s.estado).toLowerCase() === 'disponible' ? '🟢 Disponible' : '🔴 Ocupado'}</td>
+                            <td>\${s.cliente_id ? 'Asignado (ID: ' + s.cliente_id + ')' : 'Libre'}</td>
                             <td>
-                                <!-- NUEVOS BOTONES DE ACCIÓN PARA STOCK -->
-                                <button class="btn-edit" style="margin-bottom: 5px;" onclick="editarStockRapido('${s.id}', '${s.clave || ''}', '${s.pin || ''}')">✏️ Editar</button>
-                                <button class="btn-danger" onclick="eliminarStockRapido('${s.id}')">🗑️ Eliminar</button>
+                                <button class="btn-edit" style="margin-bottom: 5px;" onclick="editarStockRapido('\${s.id}', '\${s.clave || ''}', '\${s.pin || ''}')">✏️️ Editar</button>
+                                <button class="btn-danger" onclick="eliminarStockRapido('\${s.id}')">🗑️ Eliminar</button>
                             </td>
                         </tr>
-                    `).join('');
+                    \`).join('');
 
-                    contenedor.innerHTML += `
-                        <h4 class="stock-section-title">📺 ${plat} (${cuentas.length} cuentas)</h4>
+                    contenedor.innerHTML += \`
+                        <h4 class="stock-section-title">📺 \${plat} (\${cuentas.length} cuentas)</h4>
                         <table>
                             <thead>
                                 <tr>
@@ -945,9 +944,9 @@ app.get('/', (req, res) => {
                                     <th>Acciones</th>
                                 </tr>
                             </thead>
-                            <tbody>${rowsHtml}</tbody>
+                            <tbody>\${rowsHtml}</tbody>
                         </table>
-                    `;
+                    \`;
                 }
             }
 
