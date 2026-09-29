@@ -887,6 +887,30 @@ app.get('/', (req, res) => {
 
                 renderClientesTable(localClientes);
                 renderStockPorServicios(localCuentas);
+                
+                // NUEVO: CARGAR EL HISTORIAL DEL CHAT AL INICIAR
+                await cargarHistorialChatPanel();
+            }
+            async function cargarHistorialChatPanel() {
+                try {
+                    const res = await fetch('/api/historial-panel');
+                    const data = await res.json();
+                    
+                    if (data.success && data.mensajes.length > 0) {
+                        const chatBox = document.getElementById('chatMessages');
+                        chatBox.innerHTML = ''; // Limpiamos el saludo inicial
+                        webChatHistory = []; // Reseteamos la memoria local
+                        
+                        data.mensajes.forEach(msg => {
+                            const claseMsg = msg.role === 'user' ? 'user' : 'bot';
+                            chatBox.innerHTML += "<div class='chat-msg " + claseMsg + "'>" + msg.content + "</div>";
+                            webChatHistory.push({ role: msg.role, content: msg.content }); // Cargamos la memoria
+                        });
+                        chatBox.scrollTop = chatBox.scrollHeight;
+                    }
+                } catch (e) {
+                    console.error("Error cargando historial del chat", e);
+                }
             }
 
             function renderClientesTable(lista) {
