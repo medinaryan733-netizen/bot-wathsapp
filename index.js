@@ -340,18 +340,46 @@ app.post('/api/enviar-mensaje-cliente', async (req, res) => {
 
 app.post('/api/chat-bot', async (req, res) => {
     const { mensaje, historial, phone } = req.body; 
+    const remitente = phone || 'PanelWeb'; // Identificador clave para no perder la memoria del panel
     
     try {
-        // 1. Obtenemos instrucciones personalizadas guardadas en Supabase
+        // 1. GUARDAMOS TU MENSAJE EN SUPABASE (Para que no lo olvide al actualizar la página)
+        await supabase.from('messages').insert({
+            phone: remitente,
+            role: 'user',
+            content: mensaje
+        });
+
+        // 2. REGISTRO AUTOMÁTICO SI VIENE DE WHATSAPP
+        if (phone && phone !== 'PanelWeb') {
+            const telefonoLimpio = String(phone).replace(/\D/g, '');
+            const { data: clienteExistente } = await supabase
+                .from('CLIENTES')
+                .select('*')
+                .eq('telefono', telefonoLimpio)
+                .single();
+
+            if (!clienteExistente) {
+                await supabase.from('CLIENTES').insert({
+                    telefono: telefonoLimpio,
+                    nombre: `Cliente Ws (${telefonoLimpio.slice(-4)})`,
+                    chances: 0
+                });
+            }
+        }
+
+        // 3. CARGAMOS INSTRUCCIONES Y MEMORIA DESDE LA BASE DE DATOS
         const { data: dbInstrucciones } = await supabase.from('bot_instrucciones').select('instruccion');
         const instruccionesExtra = dbInstrucciones?.map(i => `- ${i.instruccion}`).join('\n') || 'Ninguna instrucción adicional.';
 
         const fullClientes = await fetchFullClientes();
         const { data: cuentasStock } = await supabase.from('CUENTAS').select('*');
         
+        // TRAEMOS EL HISTORIAL REAL DE SUPABASE PARA QUE NO PIERDA EL HILO
         const { data: ultimosMensajes } = await supabase
             .from('messages')
             .select('*')
+            .eq('phone', remitente)
             .order('created_at', { ascending: false })
             .limit(30);
 
@@ -364,88 +392,38 @@ app.post('/api/chat-bot', async (req, res) => {
         ).join('\n') || 'No hay cuentas registradas.';
 
         const historialConversacion = (ultimosMensajes || []).reverse().map(m => 
-            `[Tel: ${m.phone} | Rol: ${m.role}]: ${m.content}`
-        ).join('\n') || 'No hay mensajes recientes en la base de datos.';
+            `[Rol: ${m.role}]: ${m.content}`
+        ).join('\n') || 'No hay mensajes previos.';
 
-        const messagesFormatted = (historial || []).map(m => ({ role: m.role, content: m.content }));
+        const messagesFormatted = (historial && historial.length > 0) ? historial.map(m => ({ role: m.role, content: m.content })) : [];
         messagesFormatted.push({ role: 'user', content: mensaje });
 
+        // TODAS LAS HERRAMIENTAS ACTIVAS PARA ALICE
         const tools = [
             {
                 name: "guardar_instruccion",
-                description: "Guarda una nueva regla, instrucción o comportamiento permanente para ALICE en la base de datos.",
-                input_schema: {
-                    type: "object",
-                    properties: {
-                        instruccion: { type: "string", description: "La regla o instrucción que ALICE debe recordar de ahora en adelante." }
-                    },
-                    required: ["instruccion"]
-                }
+                description: "Guarda una nueva regla, instrucción o comportamiento permanente para ALICE.",
+                input_schema: { type: "object", properties: { instruccion: { type: "string" } }, required: ["instruccion"] }
             },
             {
                 name: "guardar_cliente",
-                description: "Registra un nuevo cliente en la base de datos de Supabase.",
-                input_schema: {
-                    type: "object",
-                    properties: {
-                        nombre: { type: "string" },
-                        telefono: { type: "string" },
-                        chances: { type: "number" }
-                    },
-                    required: ["nombre", "telefono"]
-                }
+                description: "Registra un nuevo cliente en Supabase.",
+                input_schema: { type: "object", properties: { nombre: { type: "string" }, telefono: { type: "string" }, chances: { type: "number" } }, required: ["nombre", "telefono"] }
             },
             {
                 name: "guardar_stock",
                 description: "Guarda una cuenta con sus perfiles en Supabase.",
-                input_schema: {
-                    type: "object",
-                    properties: {
-                        plataforma: { type: "string" },
-                        correo: { type: "string" },
-                        clave: { type: "string" },
-                        perfiles: {
-                            type: "array",
-                            items: {
-                                type: "object",
-                                properties: {
-                                    perfil: { type: "string" },
-                                    pin: { type: "string" },
-                                    estado: { type: "string", enum: ["disponible", "ocupado"] },
-                                    telefono_cliente: { type: "string" }
-                                },
-                                required: ["perfil", "estado"]
-                            }
-                        }
-                    },
-                    required: ["plataforma", "correo", "clave", "perfiles"]
-                }
+                input_schema: { type: "object", properties: { plataforma: { type: "string" }, correo: { type: "string" }, clave: { type: "string" }, perfiles: { type: "array", items: { type: "object", properties: { perfil: { type: "string" }, pin: { type: "string" }, estado: { type: "string", enum: ["disponible", "ocupado"] }, telefono_cliente: { type: "string" } }, required: ["perfil", "estado"] } } }, required: ["plataforma", "correo", "clave", "perfiles"] }
             },
             {
                 name: "dar_cuenta",
                 description: "Busca automáticamente una cuenta disponible de la plataforma solicitada, la marca como 'ocupada' y la asigna a un cliente.",
-                input_schema: {
-                    type: "object",
-                    properties: {
-                        plataforma: { type: "string" },
-                        telefono_cliente: { type: "string" }
-                    },
-                    required: ["plataforma", "telefono_cliente"]
-                }
+                input_schema: { type: "object", properties: { plataforma: { type: "string" }, telefono_cliente: { type: "string" } }, required: ["plataforma", "telefono_cliente"] }
             },
             {
                 name: "actualizar_credenciales",
-                description: "Actualiza la contraseña o el PIN de una cuenta existente en el stock de Supabase.",
-                input_schema: {
-                    type: "object",
-                    properties: {
-                        correo: { type: "string" },
-                        nueva_clave: { type: "string" },
-                        nuevo_pin: { type: "string" },
-                        perfil: { type: "string" }
-                    },
-                    required: ["correo"]
-                }
+                description: "Actualiza la contraseña o el PIN de una cuenta existente en el stock.",
+                input_schema: { type: "object", properties: { correo: { type: "string" }, nueva_clave: { type: "string" }, nuevo_pin: { type: "string" }, perfil: { type: "string" } }, required: ["correo"] }
             }
         ];
 
@@ -453,11 +431,13 @@ app.post('/api/chat-bot', async (req, res) => {
             model: 'claude-sonnet-4-6',
             max_tokens: 900,
             tools: tools,
-            system: (typeof SYSTEM_PROMPT !== 'undefined' ? SYSTEM_PROMPT : 'Eres ALICE, un bot asistente de CRM y stock.') + 
-                `\n\n[INSTRUCCIONES Y REGLAS APRENDIDAS DE RYAN]:\n${instruccionesExtra}\n\n` +
-                `[INFO INTERNA]: Estás conversando con RYAN o asistiendo a clientes.\n\n1. CLIENTES:\n${listaClientes}\n\n2. TODAS LAS CUENTAS:\n${stockGeneral}\n\n3. HISTORIAL:\n${historialConversacion}\n\n- Si Ryan te da una regla nueva o te pide recordar algo, usá 'guardar_instruccion'.\n- Si piden registrar un cliente nuevo, usá 'guardar_cliente'.\n- Si piden dar una cuenta, usá 'dar_cuenta'.\n- Si pasan stock nuevo, usá 'guardar_stock'.\n- Si piden cambiar claves o reportan fallos, usá 'actualizar_credenciales'.`,
+            system: (typeof SYSTEM_PROMPT !== 'undefined' ? SYSTEM_PROMPT : 'Eres ALICE, un bot asistente.') + 
+                `\n\n[INSTRUCCIONES PERMANENTES]:\n${instruccionesExtra}\n\n` +
+                `[INFO INTERNA]:\n1. CLIENTES:\n${listaClientes}\n\n2. TODAS LAS CUENTAS:\n${stockGeneral}\n\n3. HISTORIAL DE ESTE CHAT:\n${historialConversacion}\n\n- Usá SIEMPRE las herramientas cuando te pidan agregar un cliente, editar stock, dar cuenta o recordar algo.`,
             messages: messagesFormatted
         });
+
+        let replyText = "";
 
         if (response.stop_reason === "tool_use") {
             const toolUseBlock = response.content.find(block => block.type === "tool_use");
@@ -467,32 +447,19 @@ app.post('/api/chat-bot', async (req, res) => {
                 try {
                     if (toolUseBlock.name === "guardar_instruccion") {
                         const { instruccion } = toolUseBlock.input;
-                        const { error: insertError } = await supabase.from('bot_instrucciones').insert({ instruccion });
-                        toolResultContent = !insertError ? `Instrucción guardada de forma permanente: "${instruccion}"` : `Error: ${insertError.message}`;
+                        const { error } = await supabase.from('bot_instrucciones').insert({ instruccion });
+                        toolResultContent = !error ? `Instrucción guardada: "${instruccion}"` : `Error: ${error.message}`;
                     }
                     else if (toolUseBlock.name === "guardar_cliente") {
                         const { nombre, telefono, chances } = toolUseBlock.input;
-                        const { error: insertError } = await supabase.from('CLIENTES').insert({
-                            nombre: nombre,
-                            telefono: telefono,
-                            chances: chances || 0
-                        });
-                        toolResultContent = !insertError ? `Cliente ${nombre} guardado con éxito.` : `Error de Supabase: ${insertError.message}`;
+                        const { error } = await supabase.from('CLIENTES').insert({ nombre, telefono, chances: chances || 0 });
+                        toolResultContent = !error ? `Cliente ${nombre} guardado.` : `Error de Supabase: ${error.message}`;
                     }
                     else if (toolUseBlock.name === "guardar_stock") {
                         const { plataforma, correo, clave, perfiles } = toolUseBlock.input;
-                        const registrosAInsertar = perfiles.map(p => ({
-                            plataforma: plataforma,
-                            correo: correo,
-                            clave: clave || '',
-                            perfil: p.perfil || '',
-                            pin: p.pin || '',
-                            estado: p.estado || 'disponible',
-                            telefono: p.telefono_cliente || null
-                        }));
-
-                        const { error: insertError } = await supabase.from('CUENTAS').insert(registrosAInsertar);
-                        toolResultContent = !insertError ? `Cuenta guardada con éxito.` : `Error de Supabase: ${insertError.message}`;
+                        const registros = perfiles.map(p => ({ plataforma, correo, clave: clave || '', perfil: p.perfil || '', pin: p.pin || '', estado: p.estado || 'disponible', telefono: p.telefono_cliente || null }));
+                        const { error } = await supabase.from('CUENTAS').insert(registros);
+                        toolResultContent = !error ? `Cuenta guardada.` : `Error: ${error.message}`;
                     } 
                     else if (toolUseBlock.name === "dar_cuenta") {
                         const { plataforma, telefono_cliente } = toolUseBlock.input;
@@ -500,12 +467,8 @@ app.post('/api/chat-bot', async (req, res) => {
                         const cuentaLibre = stockDisp.find(s => s.plataforma.toLowerCase() === plataforma.toLowerCase());
 
                         if (cuentaLibre) {
-                            const { error: updateError } = await supabase
-                                .from('CUENTAS')
-                                .update({ estado: 'ocupado', telefono: telefono_cliente })
-                                .eq('id', cuentaLibre.id);
-
-                            toolResultContent = !updateError ? `Cuenta ${cuentaLibre.plataforma} entregada con éxito.` : `Error: ${updateError.message}`;
+                            const { error } = await supabase.from('CUENTAS').update({ estado: 'ocupado', telefono: telefono_cliente }).eq('id', cuentaLibre.id);
+                            toolResultContent = !error ? `Cuenta entregada.` : `Error: ${error.message}`;
                         } else {
                             toolResultContent = `No hay stock disponible de ${plataforma}.`;
                         }
@@ -517,45 +480,91 @@ app.post('/api/chat-bot', async (req, res) => {
                         if (nuevo_pin) updateData.pin = nuevo_pin;
 
                         let query = supabase.from('CUENTAS').update(updateData).eq('correo', correo);
-                        if (perfil) {
-                            query = query.eq('perfil', perfil);
-                        }
+                        if (perfil) query = query.eq('perfil', perfil);
 
-                        const { error: updateError } = await query;
-                        toolResultContent = !updateError ? `Credenciales actualizadas para ${correo}.` : `Error: ${updateError.message}`;
+                        const { error } = await query;
+                        toolResultContent = !error ? `Credenciales actualizadas para ${correo}.` : `Error: ${error.message}`;
                     }
                 } catch (toolErr) {
-                    toolResultContent = `Error ejecutando la herramienta: ${toolErr.message}`;
+                    toolResultContent = `Error en herramienta: ${toolErr.message}`;
                 }
 
                 messagesFormatted.push({ role: 'assistant', content: response.content });
                 messagesFormatted.push({
                     role: 'user',
-                    content: [{
-                        type: 'tool_result',
-                        tool_use_id: toolUseBlock.id,
-                        content: toolResultContent
-                    }]
+                    content: [{ type: 'tool_result', tool_use_id: toolUseBlock.id, content: toolResultContent }]
                 });
 
                 const finalResponse = await client.messages.create({
                     model: 'claude-sonnet-4-6',
                     max_tokens: 600,
                     tools: tools,
-                    system: (typeof SYSTEM_PROMPT !== 'undefined' ? SYSTEM_PROMPT : 'Eres ALICE.') + `\n\n[INSTRUCCIONES Y REGLAS APRENDIDAS]:\n${instruccionesExtra}`,
+                    system: (typeof SYSTEM_PROMPT !== 'undefined' ? SYSTEM_PROMPT : 'Eres ALICE.'),
                     messages: messagesFormatted
                 });
 
-                res.json({ success: true, reply: finalResponse.content[0].text });
-                return;
+                const textBlock = finalResponse.content.find(block => block.type === 'text');
+                replyText = textBlock ? textBlock.text : 'Acción ejecutada.';
             }
+        } else {
+            const textBlock = response.content.find(block => block.type === 'text');
+            replyText = textBlock ? textBlock.text : 'Respuesta procesada.';
         }
 
-        const textContent = response.content.find(block => block.type === 'text');
-        res.json({ success: true, reply: textContent ? textContent.text : 'Respuesta procesada.' });
+        // 4. GUARDAMOS LA RESPUESTA DE ALICE PARA COMPLETAR LA MEMORIA
+        await supabase.from('messages').insert({
+            phone: remitente,
+            role: 'assistant',
+            content: replyText
+        });
+
+        res.json({ success: true, reply: replyText });
 
     } catch (e) {
-        console.error('Error crítico en /api/chat-bot:', e.message);
+        console.error('Error en /api/chat-bot:', e.message);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+// ==========================================
+// RUTAS PARA EL PANEL WEB (BOTONES FÍSICOS)
+// ==========================================
+
+// Eliminar un cliente
+app.delete('/api/clientes/:id', async (req, res) => {
+    try {
+        const { error } = await supabase.from('CLIENTES').delete().eq('id', req.params.id);
+        if (error) throw error;
+        res.json({ success: true, message: 'Cliente eliminado correctamente' });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// Eliminar una cuenta del stock
+app.delete('/api/cuentas/:id', async (req, res) => {
+    try {
+        const { error } = await supabase.from('CUENTAS').delete().eq('id', req.params.id);
+        if (error) throw error;
+        res.json({ success: true, message: 'Cuenta eliminada correctamente' });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// Editar una cuenta (Clave, PIN o Teléfono asignado)
+app.put('/api/cuentas/:id', async (req, res) => {
+    try {
+        const { clave, pin, estado, telefono } = req.body;
+        const { error } = await supabase.from('CUENTAS').update({
+            clave, 
+            pin, 
+            estado, 
+            telefono
+        }).eq('id', req.params.id);
+        
+        if (error) throw error;
+        res.json({ success: true, message: 'Cuenta actualizada correctamente' });
+    } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
 });
