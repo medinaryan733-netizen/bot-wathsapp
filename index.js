@@ -748,6 +748,7 @@ app.get('/', (req, res) => {
                         <div class="chat-msg bot">¡Hola Ryan! ¿En qué te ayudo hoy? Conozco tus clientes y stock. 😊</div>
                     </div>
                     <div class="chat-input-row">
+                        <button onclick="limpiarChat()" style="background:#ef4444; color:white; border:none; border-radius:6px; cursor:pointer; width:auto; padding:0 15px;" title="Borrar memoria">🗑️</button>
                         <input type="text" id="chatInputText" placeholder="Escribí un mensaje para ALICE..." onkeydown="if(event.key==='Enter') sendWebChat()">
                         <button onclick="sendWebChat()" class="btn-primary">Enviar</button>
                     </div>
@@ -887,6 +888,10 @@ app.get('/', (req, res) => {
 
                 renderClientesTable(localClientes);
                 renderStockPorServicios(localCuentas);
+
+                // NUEVO: RESTAURA EL CHAT AL ENTRAR AL PANEL
+                restaurarMemoriaChat();
+            }
                 
                 // NUEVO: CARGAR EL HISTORIAL DEL CHAT AL INICIAR
                 await cargarHistorialChatPanel();
@@ -1122,7 +1127,7 @@ app.get('/', (req, res) => {
                 }
             }
 
-            async function sendWebChat() {
+           async function sendWebChat() {
                 const input = document.getElementById('chatInputText');
                 const text = input.value.trim();
                 if (!text) return;
@@ -1132,6 +1137,10 @@ app.get('/', (req, res) => {
                 input.value = '';
                 chatBox.scrollTop = chatBox.scrollHeight;
 
+                // GUARDAMOS TU MENSAJE EN LA MEMORIA DEL NAVEGADOR
+                webChatHistory.push({ role: 'user', content: text });
+                localStorage.setItem('alice_chat_memoria', JSON.stringify(webChatHistory));
+
                 const res = await fetch('/api/chat-bot', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
@@ -1140,10 +1149,34 @@ app.get('/', (req, res) => {
 
                 const data = await res.json();
                 if (data.success) {
-                    webChatHistory.push({ role: 'user', content: text });
+                    // GUARDAMOS LA RESPUESTA DE ALICE EN LA MEMORIA DEL NAVEGADOR
                     webChatHistory.push({ role: 'assistant', content: data.reply });
+                    localStorage.setItem('alice_chat_memoria', JSON.stringify(webChatHistory));
+                    
                     chatBox.innerHTML += "<div class='chat-msg bot'>" + data.reply + "</div>";
                     chatBox.scrollTop = chatBox.scrollHeight;
+                }
+            }
+
+            function restaurarMemoriaChat() {
+                const guardado = localStorage.getItem('alice_chat_memoria');
+                if (guardado) {
+                    webChatHistory = JSON.parse(guardado);
+                    const chatBox = document.getElementById('chatMessages');
+                    chatBox.innerHTML = ''; 
+                    webChatHistory.forEach(msg => {
+                        const clase = msg.role === 'user' ? 'user' : 'bot';
+                        chatBox.innerHTML += "<div class='chat-msg " + clase + "'>" + msg.content + "</div>";
+                    });
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                }
+            }
+
+            function limpiarChat() {
+                if(confirm("⚠️ ¿Seguro que querés borrar toda la memoria del chat con ALICE?")) {
+                    localStorage.removeItem('alice_chat_memoria');
+                    webChatHistory = [];
+                    document.getElementById('chatMessages').innerHTML = "<div class='chat-msg bot'>¡Memoria reseteada! ¿En qué te ayudo ahora? 😊</div>";
                 }
             }
 
