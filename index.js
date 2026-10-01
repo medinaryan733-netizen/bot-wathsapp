@@ -609,6 +609,7 @@ app.post('/api/control-bot', async (req, res) => {
 
 // ==========================================
 // ==========================================
+// ==========================================
 // INTERFAZ GRÁFICA DEL PANEL WEB
 // ==========================================
 app.get('/', (req, res) => {
@@ -838,17 +839,21 @@ app.get('/', (req, res) => {
                 const user = document.getElementById('loginUser').value;
                 const pass = document.getElementById('loginPass').value;
                 
-                const res = await fetch('/api/login', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ user, pass })
-                });
-                
-                if (res.ok) {
-                    sessionStorage.setItem('nexxus_auth', '1');
-                    checkAuth();
-                } else {
-                    alert('❌ Credenciales incorrectas');
+                try {
+                    const res = await fetch('/api/login', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ user, pass })
+                    });
+                    
+                    if (res.ok) {
+                        sessionStorage.setItem('nexxus_auth', '1');
+                        checkAuth();
+                    } else {
+                        alert('❌ Credenciales incorrectas');
+                    }
+                } catch(error) {
+                    alert('❌ Error de conexión al servidor.');
                 }
             });
 
@@ -873,48 +878,25 @@ app.get('/', (req, res) => {
             }
 
             async function loadDashboardData() {
-                const res = await fetch('/api/dashboard-data');
-                const data = await res.json();
-                
-                document.getElementById('mClientes').textContent = data.totalClientes;
-                document.getElementById('mCuentasOcup').textContent = data.cuentasOcupadas;
-                document.getElementById('mStockDisp').textContent = data.stockDisponible;
-                document.getElementById('mVencProxs').textContent = data.vencimientosProximos;
-                document.getElementById('lblBotPausa').textContent = data.botPausado ? '🔴 PAUSADO' : '🟢 ACTIVO';
-                botPausadoEstado = data.botPausado;
-
-                localClientes = data.clientes;
-                localCuentas = data.stockCuentas;
-
-                renderClientesTable(localClientes);
-                renderStockPorServicios(localCuentas);
-
-                // NUEVO: RESTAURA EL CHAT AL ENTRAR AL PANEL
-                restaurarMemoriaChat();
-            }
-                
-                // NUEVO: CARGAR EL HISTORIAL DEL CHAT AL INICIAR
-                await cargarHistorialChatPanel();
-            }
-            async function cargarHistorialChatPanel() {
                 try {
-                    const res = await fetch('/api/historial-panel');
+                    const res = await fetch('/api/dashboard-data');
                     const data = await res.json();
                     
-                    if (data.success && data.mensajes.length > 0) {
-                        const chatBox = document.getElementById('chatMessages');
-                        chatBox.innerHTML = ''; // Limpiamos el saludo inicial
-                        webChatHistory = []; // Reseteamos la memoria local
-                        
-                        data.mensajes.forEach(msg => {
-                            const claseMsg = msg.role === 'user' ? 'user' : 'bot';
-                            chatBox.innerHTML += "<div class='chat-msg " + claseMsg + "'>" + msg.content + "</div>";
-                            webChatHistory.push({ role: msg.role, content: msg.content }); // Cargamos la memoria
-                        });
-                        chatBox.scrollTop = chatBox.scrollHeight;
-                    }
-                } catch (e) {
-                    console.error("Error cargando historial del chat", e);
+                    document.getElementById('mClientes').textContent = data.totalClientes;
+                    document.getElementById('mCuentasOcup').textContent = data.cuentasOcupadas;
+                    document.getElementById('mStockDisp').textContent = data.stockDisponible;
+                    document.getElementById('mVencProxs').textContent = data.vencimientosProximos;
+                    document.getElementById('lblBotPausa').textContent = data.botPausado ? '🔴 PAUSADO' : '🟢 ACTIVO';
+                    botPausadoEstado = data.botPausado;
+
+                    localClientes = data.clientes;
+                    localCuentas = data.stockCuentas;
+
+                    renderClientesTable(localClientes);
+                    renderStockPorServicios(localCuentas);
+                    restaurarMemoriaChat();
+                } catch(e) {
+                    console.error("Error cargando dashboard:", e);
                 }
             }
 
@@ -1113,21 +1095,25 @@ app.get('/', (req, res) => {
                 const mensaje = document.getElementById('txtMsgContent').value;
                 if (!mensaje.trim()) return alert('Escribe un mensaje');
 
-                const res = await fetch('/api/enviar-mensaje-cliente', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ telefono: tel, mensaje })
-                });
+                try {
+                    const res = await fetch('/api/enviar-mensaje-cliente', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ telefono: tel, mensaje })
+                    });
 
-                if (res.ok) {
-                    alert('✅ Mensaje enviado exitosamente');
-                    closeMsgModal();
-                } else {
-                    alert('❌ Error al enviar el mensaje');
+                    if (res.ok) {
+                        alert('✅ Mensaje enviado exitosamente');
+                        closeMsgModal();
+                    } else {
+                        alert('❌ Error al enviar el mensaje');
+                    }
+                } catch(e) {
+                    alert('❌ Error de conexión.');
                 }
             }
 
-           async function sendWebChat() {
+            async function sendWebChat() {
                 const input = document.getElementById('chatInputText');
                 const text = input.value.trim();
                 if (!text) return;
@@ -1137,38 +1123,44 @@ app.get('/', (req, res) => {
                 input.value = '';
                 chatBox.scrollTop = chatBox.scrollHeight;
 
-                // GUARDAMOS TU MENSAJE EN LA MEMORIA DEL NAVEGADOR
                 webChatHistory.push({ role: 'user', content: text });
                 localStorage.setItem('alice_chat_memoria', JSON.stringify(webChatHistory));
 
-                const res = await fetch('/api/chat-bot', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ mensaje: text, historial: webChatHistory })
-                });
+                try {
+                    const res = await fetch('/api/chat-bot', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ mensaje: text, historial: webChatHistory })
+                    });
 
-                const data = await res.json();
-                if (data.success) {
-                    // GUARDAMOS LA RESPUESTA DE ALICE EN LA MEMORIA DEL NAVEGADOR
-                    webChatHistory.push({ role: 'assistant', content: data.reply });
-                    localStorage.setItem('alice_chat_memoria', JSON.stringify(webChatHistory));
-                    
-                    chatBox.innerHTML += "<div class='chat-msg bot'>" + data.reply + "</div>";
-                    chatBox.scrollTop = chatBox.scrollHeight;
+                    const data = await res.json();
+                    if (data.success) {
+                        webChatHistory.push({ role: 'assistant', content: data.reply });
+                        localStorage.setItem('alice_chat_memoria', JSON.stringify(webChatHistory));
+                        
+                        chatBox.innerHTML += "<div class='chat-msg bot'>" + data.reply + "</div>";
+                        chatBox.scrollTop = chatBox.scrollHeight;
+                    }
+                } catch(e) {
+                    chatBox.innerHTML += "<div class='chat-msg bot'>❌ Error conectando con ALICE.</div>";
                 }
             }
 
             function restaurarMemoriaChat() {
                 const guardado = localStorage.getItem('alice_chat_memoria');
                 if (guardado) {
-                    webChatHistory = JSON.parse(guardado);
-                    const chatBox = document.getElementById('chatMessages');
-                    chatBox.innerHTML = ''; 
-                    webChatHistory.forEach(msg => {
-                        const clase = msg.role === 'user' ? 'user' : 'bot';
-                        chatBox.innerHTML += "<div class='chat-msg " + clase + "'>" + msg.content + "</div>";
-                    });
-                    chatBox.scrollTop = chatBox.scrollHeight;
+                    try {
+                        webChatHistory = JSON.parse(guardado);
+                        const chatBox = document.getElementById('chatMessages');
+                        chatBox.innerHTML = ''; 
+                        webChatHistory.forEach(msg => {
+                            const clase = msg.role === 'user' ? 'user' : 'bot';
+                            chatBox.innerHTML += "<div class='chat-msg " + clase + "'>" + msg.content + "</div>";
+                        });
+                        chatBox.scrollTop = chatBox.scrollHeight;
+                    } catch(e) {
+                        console.error("Error restaurando chat");
+                    }
                 }
             }
 
@@ -1243,7 +1235,6 @@ app.get('/', (req, res) => {
     </html>`;
     res.send(html);
 });
-
 // ==========================================
 // RUTAS DE WHATSAPP (WEBHOOK META)
 // ==========================================
