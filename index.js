@@ -573,6 +573,17 @@ app.put('/api/cuentas/:id', async (req, res) => {
         res.status(500).json({ success: false, error: e.message });
     }
 });
+
+// Listar clientes para el modal de asignar
+app.get('/api/clientes', async (req, res) => {
+    try {
+        const fullClientes = await fetchFullClientes();
+        res.json(fullClientes);
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 app.post('/api/agregar-stock', async (req, res) => {
     const { plataforma, correo, clave, password, perfil, pin } = req.body;
     const passValue = clave || password || '';
@@ -925,7 +936,7 @@ app.get('/', (req, res) => {
                 });
             }
 
-         function renderStockPorServicios(lista) {
+            function renderStockPorServicios(lista) {
                 const contenedor = document.getElementById('contenedorStockPorServicio');
                 contenedor.innerHTML = '';
 
@@ -1008,7 +1019,7 @@ app.get('/', (req, res) => {
                             }
                             
                             html += '<button class="btn-edit" style="padding:5px 10px; font-size:0.8rem; margin-right:5px;" onclick="editarStockRapido(\'' + id + '\', \'' + sClave + '\', \'' + sPin + '\')">✏️ Editar</button>' +
-                                    '<button class="btn-danger" style="padding:5px 10px; font-size:0.8rem;" onclick="eliminarStockRapido(\'' + id + '\')">🗑️</button>' +
+                                    '<button class="btn-danger" style="padding:5px 10px; font-size:0.8rem;" onclick="eliminarStockRapido(\'' + id + '\')">🗑️️</button>' +
                                         '</td>' +
                                     '</tr>';
                         });
@@ -1052,115 +1063,6 @@ app.get('/', (req, res) => {
                 }
             }
 
-                // 1. Agrupar por Plataforma y separar Libres de Ocupadas
-                const plataformas = {};
-                lista.forEach(s => {
-                    const plat = (s.plataforma || 'General').trim();
-                    if (!plataformas[plat]) plataformas[plat] = { libres: [], ocupadas: [] };
-                    
-                    if (s.cliente_id || String(s.estado).toLowerCase() !== 'disponible') {
-                        plataformas[plat].ocupadas.push(s);
-                    } else {
-                        plataformas[plat].libres.push(s);
-                    }
-                });
-
-                // 2. Función interna para renderizar bloques ordenados por correo
-                function renderSubGrupo(cuentas, tipo) {
-                    if (cuentas.length === 0) return `<p style="color:var(--muted); font-size:0.9rem; margin: 10px 0;">No hay perfiles ${tipo}s.</p>`;
-                    
-                    // Agrupar por correo
-                    const porCorreo = {};
-                    cuentas.forEach(c => {
-                        const mail = (c.correo || 'Sin correo').trim();
-                        if (!porCorreo[mail]) porCorreo[mail] = [];
-                        porCorreo[mail].push(c);
-                    });
-
-                    let html = '';
-                    for (const [mail, listaCuentas] of Object.entries(porCorreo)) {
-                        listaCuentas.sort((a, b) => {
-                            const pA = String(a.perfil || '');
-                            const pB = String(b.perfil || '');
-                            return pA.localeCompare(pB, undefined, {numeric: true, sensitivity: 'base'});
-                        });
-
-                        html += `<div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 15px; overflow: hidden;">
-                                    <div style="background: #1e293b; padding: 10px 15px; font-weight: bold; font-size: 0.95rem; border-bottom: 1px solid var(--border);">
-                                        📧 <span style="color: var(--accent);">${mail}</span> 
-                                        <span style="color: var(--muted); font-size: 0.85rem; font-weight: normal; margin-left: 10px;">(Clave: ${listaCuentas[0].clave || '-'})</span>
-                                    </div>
-                                    <div style="padding: 0;">
-                                        <table style="margin: 0; width: 100%; border-collapse: collapse; font-size: 0.85rem; background: transparent;">
-                                            <thead>
-                                                <tr>
-                                                    <th style="background: transparent; padding: 8px 15px;">Perfil</th>
-                                                    <th style="background: transparent; padding: 8px 15px;">PIN</th>
-                                                    ${tipo === 'ocupada' ? '<th style="background: transparent; padding: 8px 15px;">Asignado a ID</th>' : ''}
-                                                    <th style="background: transparent; padding: 8px 15px; text-align: right;">Acciones</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>`;
-                        
-                        listaCuentas.forEach(s => {
-                            const asig = s.cliente_id ? `<span style="color:#3b82f6; font-weight:bold;">#${s.cliente_id}</span>` : '-';
-                            html += `<tr style="border-top: 1px solid #334155;">
-                                        <td style="padding: 8px 15px;"><strong>P: ${s.perfil || '-'}</strong></td>
-                                        <td style="padding: 8px 15px;"><strong>${s.pin || '-'}</strong></td>
-                                        ${tipo === 'ocupada' ? `<td style="padding: 8px 15px;">${asig}</td>` : ''}
-                                        
-                                        <!-- ACÁ ESTÁ EL BOTÓN DE ASIGNAR INCLUIDO -->
-                                        <td style="padding: 8px 15px; text-align: right;">
-                                            ${tipo === 'libre' ? `<button style='padding:5px 10px; font-size:0.8rem; margin-right:5px; background:#3b82f6; border:none; border-radius:4px; color:white; cursor:pointer;' onclick='abrirModalAsignar("${s.id}")'>👤 Asignar</button>` : ''}
-                                            <button class='btn-edit' style='padding:5px 10px; font-size:0.8rem; margin-right:5px;' onclick='editarStockRapido("${s.id}", "${s.clave || ""}", "${s.pin || ""}")'>✏️ Editar</button>
-                                            <button class='btn-danger' style='padding:5px 10px; font-size:0.8rem;' onclick='eliminarStockRapido("${s.id}")'>🗑️</button>
-                                        </td>
-                                    </tr>`;
-                        });
-
-                        html += `</tbody></table></div></div>`;
-                    }
-                    return html;
-                }
-
-                // 3. Construir la vista principal con menús desplegables
-                for (const [plat, data] of Object.entries(plataformas)) {
-                    const totalLibres = data.libres.length;
-                    const totalOcupadas = data.ocupadas.length;
-                    
-                    let platHtml = `<div style="margin-bottom: 25px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: #0f172a;">
-                        <div style="background: #1e293b; padding: 15px; border-bottom: 1px solid var(--border);">
-                            <h3 style="color: var(--text); margin: 0; font-size: 1.2rem;">📺 ${plat} <span style="font-size:0.85rem; color:var(--muted); font-weight:normal; float:right;">Total: ${totalLibres + totalOcupadas} perfiles</span></h3>
-                        </div>
-                        
-                        <div style="padding: 15px;">
-                            <details style="margin-bottom: 15px; background: rgba(16, 185, 129, 0.05); border-radius: 6px; border: 1px solid #10b98140;" open>
-                                <summary style="padding: 12px 15px; font-weight: bold; cursor: pointer; color: #10b981; list-style: none; display: flex; justify-content: space-between; align-items: center;">
-                                    <span style="font-size: 1rem;">🟢 Disponibles (${totalLibres})</span>
-                                    <span style="font-size: 0.8rem; color: var(--muted);">Tocar para Ver/Ocultar 🔽</span>
-                                </summary>
-                                <div style="padding: 15px; border-top: 1px solid #10b98140;">
-                                    ${renderSubGrupo(data.libres, 'libre')}
-                                </div>
-                            </details>
-
-                            <details style="background: rgba(239, 68, 68, 0.05); border-radius: 6px; border: 1px solid #ef444440;">
-                                <summary style="padding: 12px 15px; font-weight: bold; cursor: pointer; color: #ef4444; list-style: none; display: flex; justify-content: space-between; align-items: center;">
-                                    <span style="font-size: 1rem;">🔴 Ocupados (${totalOcupadas})</span>
-                                    <span style="font-size: 0.8rem; color: var(--muted);">Tocar para Ver/Ocultar 🔽</span>
-                                </summary>
-                                <div style="padding: 15px; border-top: 1px solid #ef444440;">
-                                    ${renderSubGrupo(data.ocupadas, 'ocupada')}
-                                </div>
-                            </details>
-                        </div>
-                    </div>`;
-                    
-                    contenedor.innerHTML += platHtml;
-                }
-            }
-
-            // PASO 2: FUNCIÓN PARA ABRIR LA VENTANA DE ASIGNACIÓN
             async function abrirModalAsignar(idCuenta) {
                 try {
                     const res = await fetch('/api/clientes');
@@ -1193,7 +1095,6 @@ app.get('/', (req, res) => {
                 }
             }
 
-            // PASO 2b: FUNCIÓN PARA ENVIAR LA ORDEN AL SERVIDOR
             async function confirmarAsignacion(idCuenta) {
                 const clienteId = document.getElementById('selectClienteModal').value;
                 if (!clienteId) {
@@ -1212,48 +1113,12 @@ app.get('/', (req, res) => {
                     if (data.success) {
                         document.getElementById('modalAsignar').remove();
                         alert('¡Cuenta asignada con éxito! ✅');
-                        location.reload(); // Recarga la página para mostrar los cambios
+                        location.reload(); 
                     } else {
                         alert('Error al asignar: ' + data.error);
                     }
                 } catch(e) {
                     alert('Error de conexión con el servidor.');
-                }
-            }
-
-                const grupos = {};
-                lista.forEach(s => {
-                    const plat = (s.plataforma || 'General').trim();
-                    if (!grupos[plat]) grupos[plat] = [];
-                    grupos[plat].push(s);
-                });
-
-                if (Object.keys(grupos).length === 0) {
-                    contenedor.innerHTML = '<p style="color:var(--muted); padding:10px;">No hay cuentas en el inventario.</p>';
-                    return;
-                }
-
-                for (const [plat, cuentas] of Object.entries(grupos)) {
-                    let rowsHtml = '';
-                    
-                    cuentas.forEach(s => {
-                        let status = String(s.estado).toLowerCase() === 'disponible' ? '🟢 Disponible' : '🔴 Ocupado';
-                        let asig = s.cliente_id ? 'Asignado (ID: ' + s.cliente_id + ')' : 'Libre';
-                        
-                        rowsHtml += "<tr>" +
-                            "<td>" + s.correo + " / " + (s.clave || "-") + "</td>" +
-                            "<td>Perfil: " + (s.perfil || "-") + " / PIN: " + (s.pin || "-") + "</td>" +
-                            "<td>" + status + "</td>" +
-                            "<td>" + asig + "</td>" +
-                            "<td>" +
-                                "<button class='btn-edit' style='margin-bottom: 5px;' onclick='editarStockRapido(\\"" + s.id + "\\", \\"" + (s.clave || "") + "\\", \\"" + (s.pin || "") + "\\")'>✏️ Editar</button>" +
-                                "<button class='btn-danger' onclick='eliminarStockRapido(\\"" + s.id + "\\")'>🗑️ Eliminar</button>" +
-                            "</td>" +
-                        "</tr>";
-                    });
-
-                    contenedor.innerHTML += "<h4 class='stock-section-title'>📺 " + plat + " (" + cuentas.length + " cuentas)</h4>" +
-                        "<table><thead><tr><th>Correo / Clave</th><th>Perfil / PIN</th><th>Estado</th><th>Asignado a</th><th>Acciones</th></tr></thead><tbody>" + rowsHtml + "</tbody></table>";
                 }
             }
 
@@ -1527,6 +1392,7 @@ app.get('/', (req, res) => {
     </html>`;
     res.send(html);
 });
+
 // ==========================================
 // RUTAS DE WHATSAPP (WEBHOOK META)
 // ==========================================
@@ -1537,7 +1403,7 @@ app.get('/webhook', (req, res) => {
         res.sendStatus(403);
     }
 });
-// PASO 3: RUTA PARA ASIGNAR LA CUENTA EN LA BASE DE DATOS
+
 app.post('/api/asignar-cuenta', async (req, res) => {
     const { cuenta_id, cliente_id } = req.body;
     try {
@@ -1555,6 +1421,7 @@ app.post('/api/asignar-cuenta', async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 });
+
 app.post('/webhook', async (req, res) => {
     res.status(200).send('EVENT_RECEIVED');
 
