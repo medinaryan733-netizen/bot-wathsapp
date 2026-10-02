@@ -925,7 +925,7 @@ app.get('/', (req, res) => {
                 });
             }
 
-          function renderStockPorServicios(lista) {
+         function renderStockPorServicios(lista) {
                 const contenedor = document.getElementById('contenedorStockPorServicio');
                 contenedor.innerHTML = '';
 
@@ -933,6 +933,124 @@ app.get('/', (req, res) => {
                     contenedor.innerHTML = '<p style="color:var(--muted); padding:10px;">No hay cuentas en el inventario.</p>';
                     return;
                 }
+
+                const plataformas = {};
+                lista.forEach(s => {
+                    const plat = (s.plataforma || 'General').trim();
+                    if (!plataformas[plat]) plataformas[plat] = { libres: [], ocupadas: [] };
+                    
+                    if (s.cliente_id || String(s.estado).toLowerCase() !== 'disponible') {
+                        plataformas[plat].ocupadas.push(s);
+                    } else {
+                        plataformas[plat].libres.push(s);
+                    }
+                });
+
+                function renderSubGrupo(cuentas, tipo) {
+                    if (cuentas.length === 0) return '<p style="color:var(--muted); font-size:0.9rem; margin: 10px 0;">No hay perfiles ' + tipo + 's.</p>';
+                    
+                    const porCorreo = {};
+                    cuentas.forEach(c => {
+                        const mail = (c.correo || 'Sin correo').trim();
+                        if (!porCorreo[mail]) porCorreo[mail] = [];
+                        porCorreo[mail].push(c);
+                    });
+
+                    let html = '';
+                    for (const [mail, listaCuentas] of Object.entries(porCorreo)) {
+                        listaCuentas.sort((a, b) => {
+                            const pA = String(a.perfil || '');
+                            const pB = String(b.perfil || '');
+                            return pA.localeCompare(pB, undefined, {numeric: true, sensitivity: 'base'});
+                        });
+
+                        const clave = listaCuentas[0].clave || '-';
+
+                        html += '<div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 15px; overflow: hidden;">' +
+                                    '<div style="background: #1e293b; padding: 10px 15px; font-weight: bold; font-size: 0.95rem; border-bottom: 1px solid var(--border);">' +
+                                        '📧 <span style="color: var(--accent);">' + mail + '</span> ' +
+                                        '<span style="color: var(--muted); font-size: 0.85rem; font-weight: normal; margin-left: 10px;">(Clave: ' + clave + ')</span>' +
+                                    '</div>' +
+                                    '<div style="padding: 0;">' +
+                                        '<table style="margin: 0; width: 100%; border-collapse: collapse; font-size: 0.85rem; background: transparent;">' +
+                                            '<thead>' +
+                                                '<tr>' +
+                                                    '<th style="background: transparent; padding: 8px 15px;">Perfil</th>' +
+                                                    '<th style="background: transparent; padding: 8px 15px;">PIN</th>';
+                        
+                        if (tipo === 'ocupada') {
+                            html += '<th style="background: transparent; padding: 8px 15px;">Asignado a ID</th>';
+                        }
+                        
+                        html += '<th style="background: transparent; padding: 8px 15px; text-align: right;">Acciones</th>' +
+                                                '</tr>' +
+                                            '</thead>' +
+                                            '<tbody>';
+                        
+                        listaCuentas.forEach(s => {
+                            const asig = s.cliente_id ? '<span style="color:#3b82f6; font-weight:bold;">#' + s.cliente_id + '</span>' : '-';
+                            const id = s.id || '';
+                            const sClave = s.clave || '';
+                            const sPin = s.pin || '';
+                            
+                            html += '<tr style="border-top: 1px solid #334155;">' +
+                                        '<td style="padding: 8px 15px;"><strong>P: ' + (s.perfil || '-') + '</strong></td>' +
+                                        '<td style="padding: 8px 15px;"><strong>' + (s.pin || '-') + '</strong></td>';
+                            
+                            if (tipo === 'ocupada') {
+                                html += '<td style="padding: 8px 15px;">' + asig + '</td>';
+                            }
+                            
+                            html += '<td style="padding: 8px 15px; text-align: right;">';
+                            
+                            if (tipo === 'libre') {
+                                html += '<button style="padding:5px 10px; font-size:0.8rem; margin-right:5px; background:#3b82f6; border:none; border-radius:4px; color:white; cursor:pointer;" onclick="abrirModalAsignar(\'' + id + '\')">👤 Asignar</button>';
+                            }
+                            
+                            html += '<button class="btn-edit" style="padding:5px 10px; font-size:0.8rem; margin-right:5px;" onclick="editarStockRapido(\'' + id + '\', \'' + sClave + '\', \'' + sPin + '\')">✏️ Editar</button>' +
+                                    '<button class="btn-danger" style="padding:5px 10px; font-size:0.8rem;" onclick="eliminarStockRapido(\'' + id + '\')">🗑️</button>' +
+                                        '</td>' +
+                                    '</tr>';
+                        });
+
+                        html += '</tbody></table></div></div>';
+                    }
+                    return html;
+                }
+
+                for (const [plat, data] of Object.entries(plataformas)) {
+                    const totalLibres = data.libres.length;
+                    const totalOcupadas = data.ocupadas.length;
+                    
+                    let platHtml = '<div style="margin-bottom: 25px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: #0f172a;">' +
+                        '<div style="background: #1e293b; padding: 15px; border-bottom: 1px solid var(--border);">' +
+                            '<h3 style="color: var(--text); margin: 0; font-size: 1.2rem;">📺 ' + plat + ' <span style="font-size:0.85rem; color:var(--muted); font-weight:normal; float:right;">Total: ' + (totalLibres + totalOcupadas) + ' perfiles</span></h3>' +
+                        '</div>' +
+                        '<div style="padding: 15px;">' +
+                            '<details style="margin-bottom: 15px; background: rgba(16, 185, 129, 0.05); border-radius: 6px; border: 1px solid #10b98140;" open>' +
+                                '<summary style="padding: 12px 15px; font-weight: bold; cursor: pointer; color: #10b981; list-style: none; display: flex; justify-content: space-between; align-items: center;">' +
+                                    '<span style="font-size: 1rem;">🟢 Disponibles (' + totalLibres + ')</span>' +
+                                    '<span style="font-size: 0.8rem; color: var(--muted);">Tocar para Ver/Ocultar 🔽</span>' +
+                                '</summary>' +
+                                '<div style="padding: 15px; border-top: 1px solid #10b98140;">' +
+                                    renderSubGrupo(data.libres, 'libre') +
+                                '</div>' +
+                            '</details>' +
+                            '<details style="background: rgba(239, 68, 68, 0.05); border-radius: 6px; border: 1px solid #ef444440;">' +
+                                '<summary style="padding: 12px 15px; font-weight: bold; cursor: pointer; color: #ef4444; list-style: none; display: flex; justify-content: space-between; align-items: center;">' +
+                                    '<span style="font-size: 1rem;">🔴 Ocupados (' + totalOcupadas + ')</span>' +
+                                    '<span style="font-size: 0.8rem; color: var(--muted);">Tocar para Ver/Ocultar 🔽</span>' +
+                                '</summary>' +
+                                '<div style="padding: 15px; border-top: 1px solid #ef444440;">' +
+                                    renderSubGrupo(data.ocupadas, 'ocupada') +
+                                '</div>' +
+                            '</details>' +
+                        '</div>' +
+                    '</div>';
+                    
+                    contenedor.innerHTML += platHtml;
+                }
+            }
 
                 // 1. Agrupar por Plataforma y separar Libres de Ocupadas
                 const plataformas = {};
@@ -1045,35 +1163,30 @@ app.get('/', (req, res) => {
             // PASO 2: FUNCIÓN PARA ABRIR LA VENTANA DE ASIGNACIÓN
             async function abrirModalAsignar(idCuenta) {
                 try {
-                    // Busca la lista de clientes en tu servidor
                     const res = await fetch('/api/clientes');
                     const clientes = await res.json();
                     const lista = Array.isArray(clientes) ? clientes : (clientes.data || []);
                     
                     let opciones = '<option value="">-- Seleccionar un Cliente --</option>';
                     lista.forEach(c => {
-                        opciones += `<option value="${c.id}">#${c.id} - ${c.nombre} (${c.telefono || 'Sin número'})</option>`;
+                        opciones += '<option value="' + c.id + '">#' + c.id + ' - ' + c.nombre + ' (' + (c.telefono || 'Sin número') + ')</option>';
                     });
 
-                    // Crea la ventana emergente oscura
                     const modal = document.createElement('div');
                     modal.id = 'modalAsignar';
                     modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); display:flex; justify-content:center; align-items:center; z-index:9999;';
-                    modal.innerHTML = `
-                        <div style="background:#1e293b; padding:25px; border-radius:10px; border:1px solid #3b82f6; width:90%; max-width:400px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
-                            <h3 style="color:white; margin-top:0; border-bottom:1px solid #334155; padding-bottom:10px;">👤 Asignar Cuenta a Cliente</h3>
-                            <p style="color:var(--muted); font-size:0.9rem; margin-bottom:15px;">Seleccioná al cliente de la lista para vincular este perfil:</p>
-                            
-                            <select id="selectClienteModal" style="width:100%; padding:10px; margin-bottom:20px; border-radius:5px; background:#0f172a; color:white; border:1px solid #475569; outline:none;">
-                                ${opciones}
-                            </select>
-                            
-                            <div style="display:flex; justify-content:flex-end; gap:10px;">
-                                <button onclick="document.getElementById('modalAsignar').remove()" style="background:#475569; padding:8px 15px; border:none; border-radius:5px; color:white; cursor:pointer;">Cancelar</button>
-                                <button onclick="confirmarAsignacion('${idCuenta}')" style="background:#10b981; padding:8px 15px; border:none; border-radius:5px; color:white; cursor:pointer; font-weight:bold;">✅ Confirmar</button>
-                            </div>
-                        </div>
-                    `;
+                    modal.innerHTML = 
+                        '<div style="background:#1e293b; padding:25px; border-radius:10px; border:1px solid #3b82f6; width:90%; max-width:400px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">' +
+                            '<h3 style="color:white; margin-top:0; border-bottom:1px solid #334155; padding-bottom:10px;">👤 Asignar Cuenta a Cliente</h3>' +
+                            '<p style="color:var(--muted); font-size:0.9rem; margin-bottom:15px;">Seleccioná al cliente de la lista para vincular este perfil:</p>' +
+                            '<select id="selectClienteModal" style="width:100%; padding:10px; margin-bottom:20px; border-radius:5px; background:#0f172a; color:white; border:1px solid #475569; outline:none;">' +
+                                opciones +
+                            '</select>' +
+                            '<div style="display:flex; justify-content:flex-end; gap:10px;">' +
+                                '<button onclick="document.getElementById(\'modalAsignar\').remove()" style="background:#475569; padding:8px 15px; border:none; border-radius:5px; color:white; cursor:pointer;">Cancelar</button>' +
+                                '<button onclick="confirmarAsignacion(\'' + idCuenta + '\')" style="background:#10b981; padding:8px 15px; border:none; border-radius:5px; color:white; cursor:pointer; font-weight:bold;">✅ Confirmar</button>' +
+                            '</div>' +
+                        '</div>';
                     document.body.appendChild(modal);
                 } catch (e) {
                     alert('Error al cargar la lista de clientes.');
