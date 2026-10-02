@@ -360,14 +360,12 @@ app.post('/api/chat-bot', async (req, res) => {
                 .single();
 
             if (!clienteExistente) {
-                // Guarda al cliente
                 await supabase.from('CLIENTES').insert({
                     telefono: telefonoLimpio,
                     nombre: `Cliente Ws (${telefonoLimpio.slice(-4)})`,
                     chances: 0
                 });
 
-                // 🚨 NUEVO: DEJA UN MENSAJE EN EL PANEL WEB PARA QUE RYAN LO VEA
                 await supabase.from('messages').insert({
                     phone: 'PanelWeb',
                     role: 'assistant',
@@ -442,7 +440,6 @@ app.post('/api/chat-bot', async (req, res) => {
                         toolResultContent = !error ? `Cliente ${nombre} guardado.` : `Error: ${error.message}`;
                     }
                     else if (toolUseBlock.name === "guardar_stock") {
-                        // (Misma lógica de guardado de stock)
                         const { plataforma, correo, clave, perfiles } = toolUseBlock.input;
                         const registros = perfiles.map(p => ({ plataforma, correo, clave: clave || '', perfil: p.perfil || '', pin: p.pin || '', estado: p.estado || 'disponible', telefono: p.telefono_cliente || null }));
                         const { error } = await supabase.from('CUENTAS').insert(registros);
@@ -474,7 +471,6 @@ app.post('/api/chat-bot', async (req, res) => {
                     toolResultContent = `Error en herramienta: ${toolErr.message}`;
                 }
 
-                // 🚨 NUEVO: SI ESTÁ HABLANDO POR WHATSAPP Y USA UNA HERRAMIENTA, TE DEJA UN REPORTE EN EL PANEL
                 if (phone && phone !== 'PanelWeb') {
                     await supabase.from('messages').insert({
                         phone: 'PanelWeb',
@@ -502,7 +498,6 @@ app.post('/api/chat-bot', async (req, res) => {
             replyText = textBlock ? textBlock.text : 'Respuesta procesada.';
         }
 
-        // 4. GUARDAMOS LA RESPUESTA PARA EL CLIENTE/PANEL
         await supabase.from('messages').insert({
             phone: remitente,
             role: 'assistant',
@@ -516,13 +511,14 @@ app.post('/api/chat-bot', async (req, res) => {
         res.status(500).json({ success: false, error: e.message });
     }
 });
+
 app.get('/api/historial-panel', async (req, res) => {
     try {
         const { data: mensajes } = await supabase
             .from('messages')
             .select('*')
             .eq('phone', 'PanelWeb')
-            .order('created_at', { ascending: true }) // De más viejo a más nuevo para el chat
+            .order('created_at', { ascending: true })
             .limit(50);
             
         res.json({ success: true, mensajes: mensajes || [] });
@@ -530,11 +526,11 @@ app.get('/api/historial-panel', async (req, res) => {
         res.status(500).json({ success: false, error: e.message });
     }
 });
+
 // ==========================================
 // RUTAS PARA EL PANEL WEB (BOTONES FÍSICOS)
 // ==========================================
 
-// Eliminar un cliente
 app.delete('/api/clientes/:id', async (req, res) => {
     try {
         const { error } = await supabase.from('CLIENTES').delete().eq('id', req.params.id);
@@ -545,7 +541,6 @@ app.delete('/api/clientes/:id', async (req, res) => {
     }
 });
 
-// Eliminar una cuenta del stock
 app.delete('/api/cuentas/:id', async (req, res) => {
     try {
         const { error } = await supabase.from('CUENTAS').delete().eq('id', req.params.id);
@@ -556,7 +551,6 @@ app.delete('/api/cuentas/:id', async (req, res) => {
     }
 });
 
-// Editar una cuenta (Clave, PIN o Teléfono asignado)
 app.put('/api/cuentas/:id', async (req, res) => {
     try {
         const { clave, pin, estado, telefono } = req.body;
@@ -574,7 +568,6 @@ app.put('/api/cuentas/:id', async (req, res) => {
     }
 });
 
-// Listar clientes para el modal de asignar
 app.get('/api/clientes', async (req, res) => {
     try {
         const fullClientes = await fetchFullClientes();
@@ -618,8 +611,6 @@ app.post('/api/control-bot', async (req, res) => {
     res.json({ success: true });
 });
 
-// ==========================================
-// ==========================================
 // ==========================================
 // INTERFAZ GRÁFICA DEL PANEL WEB
 // ==========================================
@@ -1015,11 +1006,11 @@ app.get('/', (req, res) => {
                             html += '<td style="padding: 8px 15px; text-align: right;">';
                             
                             if (tipo === 'libre') {
-                                html += '<button style="padding:5px 10px; font-size:0.8rem; margin-right:5px; background:#3b82f6; border:none; border-radius:4px; color:white; cursor:pointer;" onclick="abrirModalAsignar(\'' + id + '\')">👤 Asignar</button>';
+                                html += '<button style="padding:5px 10px; font-size:0.8rem; margin-right:5px; background:#3b82f6; border:none; border-radius:4px; color:white; cursor:pointer;" onclick="abrirModalAsignar(&quot;' + id + '&quot;)">👤 Asignar</button>';
                             }
                             
-                            html += '<button class="btn-edit" style="padding:5px 10px; font-size:0.8rem; margin-right:5px;" onclick="editarStockRapido(\'' + id + '\', \'' + sClave + '\', \'' + sPin + '\')">✏️ Editar</button>' +
-                                    '<button class="btn-danger" style="padding:5px 10px; font-size:0.8rem;" onclick="eliminarStockRapido(\'' + id + '\')">🗑️️</button>' +
+                            html += '<button class="btn-edit" style="padding:5px 10px; font-size:0.8rem; margin-right:5px;" onclick="editarStockRapido(&quot;' + id + '&quot;, &quot;' + sClave + '&quot;, &quot;' + sPin + '&quot;)">✏️ Editar</button>' +
+                                    '<button class="btn-danger" style="padding:5px 10px; font-size:0.8rem;" onclick="eliminarStockRapido(&quot;' + id + '&quot;)">🗑️</button>' +
                                         '</td>' +
                                     '</tr>';
                         });
@@ -1085,8 +1076,8 @@ app.get('/', (req, res) => {
                                 opciones +
                             '</select>' +
                             '<div style="display:flex; justify-content:flex-end; gap:10px;">' +
-                                '<button onclick="document.getElementById(\'modalAsignar\').remove()" style="background:#475569; padding:8px 15px; border:none; border-radius:5px; color:white; cursor:pointer;">Cancelar</button>' +
-                                '<button onclick="confirmarAsignacion(\'' + idCuenta + '\')" style="background:#10b981; padding:8px 15px; border:none; border-radius:5px; color:white; cursor:pointer; font-weight:bold;">✅ Confirmar</button>' +
+                                '<button onclick="document.getElementById(&quot;modalAsignar&quot;).remove()" style="background:#475569; padding:8px 15px; border:none; border-radius:5px; color:white; cursor:pointer;">Cancelar</button>' +
+                                '<button onclick="confirmarAsignacion(&quot;' + idCuenta + '&quot;)" style="background:#10b981; padding:8px 15px; border:none; border-radius:5px; color:white; cursor:pointer; font-weight:bold;">✅ Confirmar</button>' +
                             '</div>' +
                         '</div>';
                     document.body.appendChild(modal);
