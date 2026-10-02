@@ -1424,9 +1424,7 @@ app.get('/webhook', (req, res) => {
         res.sendStatus(403);
     }
 });
-
-app.post('/webhook', async (req, res) => {
-    // PASO 3: RUTA PARA ASIGNAR LA CUENTA EN LA BASE DE DATOS
+// PASO 3: RUTA PARA ASIGNAR LA CUENTA EN LA BASE DE DATOS
 app.post('/api/asignar-cuenta', async (req, res) => {
     const { cuenta_id, cliente_id } = req.body;
     try {
@@ -1444,6 +1442,7 @@ app.post('/api/asignar-cuenta', async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 });
+app.post('/webhook', async (req, res) => {
     res.status(200).send('EVENT_RECEIVED');
 
     try {
