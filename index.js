@@ -42,35 +42,28 @@ function checkIsOwner(phone) {
 // ==========================================
 // PROMPT DEL SISTEMA (ALICE)
 // ==========================================
-const SYSTEM_PROMPT = `Sos ALICE, la asistente virtual de NEXXUS, un negocio de entretenimiento digital. Respondés en español rioplatense, sos amable, profesional y resolutiva. Mensajes cortos y claros, usás emojis con moderación.
+const SYSTEM_PROMPT = `Sos ALICE, la asistente virtual de NEXXUS, un negocio de entretenimiento digital. Respondés en español rioplatense, sos amable, profesional y resolutiva. Mensajes cortos y claros.
 
 SERVICIOS Y PRECIOS:
 - Netflix Perfil $9000/mes.
-- Netflix perfil extra $14000/mes (perfil propio, no comparte con otros, sin problemas de hogar).
+- Netflix perfil extra $14000/mes.
 - Max $4500/mes.
 - Prime Video $4000/mes.
 - Disney+ $6000/mes.
 - Crunchyroll $2800/mes.
 - Reels Shorts $7500/mes.
 - YouTube Premium $2800/mes.
-- TV Digital pack futbol: 1) Cenit TV $7000/mes 2) TV Online Plus $10000/mes 3) Argentum $12000/mes (incluye YT Premium, Spotify, YT Music) 4) TV Sin Limites $14000/mes.
+- TV Digital pack futbol: 1) Cenit TV $7000/mes 2) TV Online Plus $10000/mes 3) Argentum $12000/mes 4) TV Sin Limites $14000/mes.
 
-MEDIOS DE PAGO: Transferencia alias RYAN.MB (Braian Gaston Medina) o efectivo.
+MEDIOS DE PAGO: Transferencia alias RYAN.MB (Braian Gaston Medina).
 
-SORTEO Y GRUPO: Sorteamos 8 plataformas cada 01 del mes. Para participar deben comprar en el mes, tener saldo al día y estar en el grupo. Link: https://chat.whatsapp.com/B4neyKRVL4a8VmHpa1iGsw (menciónalo siempre al cerrar una venta).
-
-GUIA TV DIGITAL: Para SMART TV ANDROID/FIRE STICK: 1) App Downloader (naranja) 2) Enter URL y el código 3) Instalar. CÓDIGOS TV: Cenit 7960580, TV Online Plus 3342117, Argentum 4708062, TV Sin Limites 2630214 o 4540617.
-
-REGLAS DE ATENCIÓN Y PROMOCIONES:
-- CONSULTA DE PROMOCIONES: Si el cliente pregunta por promociones, ofertas o descuentos:
-  * Si NO hay promo activa actualmente, NO vuelvas a mandar la lista completa de precios si ya la diste. Responde: "Por el momento no tenemos promociones activas vigentes, pero nuestros precios son los más accesibles del mercado. ¡Recordá que con tu compra participás del sorteo mensual!"
-  * Si HAY promo activa, menciónala con claridad.
-- CLIENTE NUEVO: Ofrécele el catálogo de forma limpia. No pidas datos de cuentas, correos o perfiles porque aún no tienen servicio.
-- SOPORTE TÉCNICO (Cliente con problema): Intenta resolver básicos (ej: guías de TV, escaneo de QR). Si faltan datos en el sistema y el cliente tiene un problema, pídele amablemente su nombre, correo, clave y perfil para que Ryan lo revise más rápido.
-- NETFLIX HOGAR: Explica con empatía que a Netflix le conviene que cada casa pague lo suyo, por eso los bloqueos. Dile que ya avisaste a Ryan.
-- AUDIOS Y LLAMADAS: Pide amablemente que te escriban en texto.
-- PAGOS ATRASADOS O ESPERAS: Jamás aceptes una espera de pago ni des acceso sin confirmación de Ryan.
-- HORARIO NOCTURNO: Si son pasadas las 00:00, aclara que Ryan ya debe estar descansando y que el problema se solucionará a primera hora.`;
+REGLAS DE ATENCIÓN ESTRICTAS:
+- VENTAS Y PAGOS: Si el cliente envía un comprobante de pago o dice que pagó, pregúntale qué plataforma quiere (si no lo aclaró antes). Si ya sabes qué plataforma quiere, USA INMEDIATAMENTE la herramienta 'dar_cuenta' para entregarle el acceso. NO ESPERES A RYAN. Entrégale la cuenta en el momento.
+- HERRAMIENTA DAR_CUENTA: Solo pásale la palabra clave principal a la herramienta (ej. "Netflix", "Max", "Disney"). La herramienta te devolverá los datos. DEBES ENVIARLE ESOS DATOS EXACTOS AL CLIENTE (Correo, Clave, Perfil y PIN).
+- VERIFICACIÓN POST-VENTA: Después de darle la cuenta, dile textualmente: "Aquí tienes tu acceso. Ryan verificará el comprobante en breve, cualquier problema te avisamos."
+- CONSULTAS DE PROMOS: Si no hay promo, dile que no hay pero los precios son los mejores. NO le envíes toda la lista de precios si ya la pasaste.
+- PROBLEMAS TÉCNICOS: Pide correo y perfil afectado para que Ryan lo revise.
+- HORARIO NOCTURNO: Si son pasadas las 00:00, aclara que Ryan ya debe estar descansando y resolverá problemas graves a primera hora.`;
 
 // ==========================================
 // WHATSAPP HELPER & CRON
@@ -129,16 +122,8 @@ async function fetchFullClientes() {
     return (clientes || []).map(c => {
         const ctas = c.CUENTAS || [];
         const cuentaObj = ctas.length > 0 ? ctas[ctas.length - 1] : {};
-
         const svcs = c.SERVICIOS || [];
         const servicioObj = svcs.length > 0 ? svcs[svcs.length - 1] : {};
-
-        const plataforma = cuentaObj.plataforma || servicioObj.servicio_id || '';
-        const correo = cuentaObj.correo || servicioObj.usuario || '';
-        const clave = cuentaObj.clave || servicioObj.clave || '';
-        const perfil = cuentaObj.perfil || servicioObj.perfil || '';
-        const pin = cuentaObj.pin || '';
-        const fecha_vencimiento = cuentaObj.fecha_vencimiento || servicioObj.fecha_vencimiento || '';
 
         return {
             id: c.id,
@@ -148,12 +133,12 @@ async function fetchFullClientes() {
             cuenta: {
                 id: cuentaObj.id || null,
                 servicio_id: servicioObj.id || null,
-                plataforma,
-                correo,
-                clave,
-                perfil,
-                pin,
-                fecha_vencimiento
+                plataforma: cuentaObj.plataforma || servicioObj.servicio_id || '',
+                correo: cuentaObj.correo || servicioObj.usuario || '',
+                clave: cuentaObj.clave || servicioObj.clave || '',
+                perfil: cuentaObj.perfil || servicioObj.perfil || '',
+                pin: cuentaObj.pin || '',
+                fecha_vencimiento: cuentaObj.fecha_vencimiento || servicioObj.fecha_vencimiento || ''
             }
         };
     });
@@ -188,17 +173,11 @@ app.get('/api/dashboard-data', async (req, res) => {
         }).length;
 
         res.json({
-            totalClientes,
-            stockDisponible,
-            cuentasOcupadas,
-            vencimientosProximos: proxsVencimientos,
-            botPausado: !!pausedChats['TODOS'],
-            promoActiva: promoActiva || 'Ninguna',
-            clientes: fullClientes,
-            stockCuentas: cuentas || []
+            totalClientes, stockDisponible, cuentasOcupadas, vencimientosProximos: proxsVencimientos,
+            botPausado: !!pausedChats['TODOS'], promoActiva: promoActiva || 'Ninguna',
+            clientes: fullClientes, stockCuentas: cuentas || []
         });
     } catch(e) {
-        console.error('Error en /api/dashboard-data:', e.message);
         res.status(500).json({ success: false, error: e.message });
     }
 });
@@ -223,48 +202,23 @@ app.post('/api/guardar-cliente', async (req, res) => {
             clientId = newCli.id;
         }
 
-        const ctaData = {
-            cliente_id: clientId,
-            plataforma: plataforma || 'Sin asignación',
-            correo: correo || '',
-            clave: passValue,
-            perfil: perfil || '',
-            pin: pin || '',
-            fecha_vencimiento: dateClean,
-            estado: 'ocupado'
-        };
-
+        const ctaData = { cliente_id: clientId, plataforma: plataforma || 'Sin asignación', correo: correo || '', clave: passValue, perfil: perfil || '', pin: pin || '', fecha_vencimiento: dateClean, estado: 'ocupado' };
         const { data: existingCtas } = await supabase.from('CUENTAS').select('id').eq('cliente_id', clientId);
         if (existingCtas && existingCtas.length > 0) {
-            for (const cta of existingCtas) {
-                await supabase.from('CUENTAS').update(ctaData).eq('id', cta.id);
-            }
+            for (const cta of existingCtas) await supabase.from('CUENTAS').update(ctaData).eq('id', cta.id);
         } else {
             await supabase.from('CUENTAS').insert([ctaData]);
         }
 
-        const svcData = {
-            cliente_id: clientId,
-            servicio_id: plataforma || 'Sin asignación',
-            usuario: correo || '',
-            clave: passValue,
-            perfil: perfil || '',
-            fecha_vencimiento: dateClean,
-            estado: 'ACTIVO'
-        };
-
+        const svcData = { cliente_id: clientId, servicio_id: plataforma || 'Sin asignación', usuario: correo || '', clave: passValue, perfil: perfil || '', fecha_vencimiento: dateClean, estado: 'ACTIVO' };
         const { data: existingSvcs } = await supabase.from('SERVICIOS').select('id').eq('cliente_id', clientId);
         if (existingSvcs && existingSvcs.length > 0) {
-            for (const svc of existingSvcs) {
-                await supabase.from('SERVICIOS').update(svcData).eq('id', svc.id);
-            }
+            for (const svc of existingSvcs) await supabase.from('SERVICIOS').update(svcData).eq('id', svc.id);
         } else {
             await supabase.from('SERVICIOS').insert([svcData]);
         }
-
         res.json({ success: true });
     } catch(e) {
-        console.error('Error en /api/guardar-cliente:', e.message);
         res.status(500).json({ success: false, error: e.message });
     }
 });
@@ -276,148 +230,77 @@ app.post('/api/editar-cliente-completo', async (req, res) => {
         const telClean = cleanNumber(nuevoTel);
         const passValue = clave || password || '';
         const dateClean = (fecha_vencimiento && String(fecha_vencimiento).trim() !== '') ? fecha_vencimiento : null;
-        const numChances = Number(chances || 0);
 
-        await supabase.from('CLIENTES').update({ nombre, telefono: telClean, chances: numChances }).eq('id', idNum);
+        await supabase.from('CLIENTES').update({ nombre, telefono: telClean, chances: Number(chances || 0) }).eq('id', idNum);
 
-        const ctaData = {
-            cliente_id: idNum,
-            plataforma: plataforma || 'Sin asignación',
-            correo: correo || '',
-            clave: passValue,
-            perfil: perfil || '',
-            pin: pin || '',
-            fecha_vencimiento: dateClean,
-            estado: 'ocupado'
-        };
-
+        const ctaData = { cliente_id: idNum, plataforma: plataforma || 'Sin asignación', correo: correo || '', clave: passValue, perfil: perfil || '', pin: pin || '', fecha_vencimiento: dateClean, estado: 'ocupado' };
         const { data: existingCtas } = await supabase.from('CUENTAS').select('id').eq('cliente_id', idNum);
         if (existingCtas && existingCtas.length > 0) {
-            for (const cta of existingCtas) {
-                await supabase.from('CUENTAS').update(ctaData).eq('id', cta.id);
-            }
+            for (const cta of existingCtas) await supabase.from('CUENTAS').update(ctaData).eq('id', cta.id);
         } else {
             await supabase.from('CUENTAS').insert([ctaData]);
         }
 
-        const svcData = {
-            cliente_id: idNum,
-            servicio_id: plataforma || 'Sin asignación',
-            usuario: correo || '',
-            clave: passValue,
-            perfil: perfil || '',
-            fecha_vencimiento: dateClean,
-            estado: 'ACTIVO'
-        };
-
+        const svcData = { cliente_id: idNum, servicio_id: plataforma || 'Sin asignación', usuario: correo || '', clave: passValue, perfil: perfil || '', fecha_vencimiento: dateClean, estado: 'ACTIVO' };
         const { data: existingSvcs } = await supabase.from('SERVICIOS').select('id').eq('cliente_id', idNum);
         if (existingSvcs && existingSvcs.length > 0) {
-            for (const svc of existingSvcs) {
-                await supabase.from('SERVICIOS').update(svcData).eq('id', svc.id);
-            }
+            for (const svc of existingSvcs) await supabase.from('SERVICIOS').update(svcData).eq('id', svc.id);
         } else {
             await supabase.from('SERVICIOS').insert([svcData]);
         }
-
         res.json({ success: true });
     } catch (e) {
-        console.error('Error en /api/editar-cliente-completo:', e.message);
         res.status(500).json({ success: false, error: e.message });
     }
 });
 
 app.post('/api/enviar-mensaje-cliente', async (req, res) => {
-    const { telefono, mensaje } = req.body;
     try {
-        const telClean = cleanNumber(telefono);
-        await sendWhatsAppMessage(telClean, mensaje);
-        await supabase.from('messages').insert([{ phone: telClean, role: 'assistant', content: mensaje }]);
+        const telClean = cleanNumber(req.body.telefono);
+        await sendWhatsAppMessage(telClean, req.body.mensaje);
+        await supabase.from('messages').insert([{ phone: telClean, role: 'assistant', content: req.body.mensaje }]);
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
 });
 
+// LOGICA CENTRAL DEL CHAT (PANEL WEB Y WHATSAPP)
 app.post('/api/chat-bot', async (req, res) => {
     const { mensaje, historial, phone } = req.body; 
     const remitente = phone || 'PanelWeb'; 
     
     try {
-        // 1. GUARDAMOS EL MENSAJE EN SUPABASE (Memoria)
-        await supabase.from('messages').insert({
-            phone: remitente,
-            role: 'user',
-            content: mensaje
-        });
+        await supabase.from('messages').insert({ phone: remitente, role: 'user', content: mensaje });
 
-        // 2. REGISTRO AUTOMÁTICO Y AVISO A RYAN
         if (phone && phone !== 'PanelWeb') {
             const telefonoLimpio = String(phone).replace(/\D/g, '');
-            const { data: clienteExistente } = await supabase
-                .from('CLIENTES')
-                .select('*')
-                .eq('telefono', telefonoLimpio)
-                .single();
-
+            const { data: clienteExistente } = await supabase.from('CLIENTES').select('*').eq('telefono', telefonoLimpio).single();
             if (!clienteExistente) {
-                await supabase.from('CLIENTES').insert({
-                    telefono: telefonoLimpio,
-                    nombre: `Cliente Ws (${telefonoLimpio.slice(-4)})`,
-                    chances: 0
-                });
-
-                await supabase.from('messages').insert({
-                    phone: 'PanelWeb',
-                    role: 'assistant',
-                    content: `🚨 **[AVISO AUTOMÁTICO]**: Ryan, acabo de registrar en la base de datos a un cliente nuevo que nos habló por WhatsApp (Tel: +${telefonoLimpio}).`
-                });
+                await supabase.from('CLIENTES').insert({ telefono: telefonoLimpio, nombre: `Cliente Ws (${telefonoLimpio.slice(-4)})`, chances: 0 });
             }
         }
 
-        // 3. CARGAMOS INSTRUCCIONES Y MEMORIA 
-        const { data: dbInstrucciones } = await supabase.from('bot_instrucciones').select('instruccion');
-        const instruccionesExtra = dbInstrucciones?.map(i => `- ${i.instruccion}`).join('\n') || 'Ninguna instrucción adicional.';
-
         const fullClientes = await fetchFullClientes();
         const { data: cuentasStock } = await supabase.from('CUENTAS').select('*');
+        const { data: ultimosMensajes } = await supabase.from('messages').select('*').eq('phone', remitente).order('created_at', { ascending: false }).limit(20);
+
+        const listaClientes = fullClientes.map(c => `• ${c.nombre} (+${c.telefono}) | Servicio: ${c.cuenta.plataforma}`).join('\n') || 'Ninguno';
+        const stockGeneral = cuentasStock?.map(s => `• ID: ${s.id} | ${s.plataforma} | Correo: ${s.correo} | Clave: ${s.clave} | Perfil: ${s.perfil} | PIN: ${s.pin} | Estado: ${s.estado}`).join('\n') || 'Vacío';
         
-        const { data: ultimosMensajes } = await supabase
-            .from('messages')
-            .select('*')
-            .eq('phone', remitente)
-            .order('created_at', { ascending: false })
-            .limit(30);
-
-        const listaClientes = fullClientes.map(c => 
-            `• ${c.nombre} (+${c.telefono}) | Servicio: ${c.cuenta.plataforma || 'Sin asignación'} | Correo: ${c.cuenta.correo || '-'} | PIN: ${c.cuenta.pin || '-'} | Chances: ${c.chances}`
-        ).join('\n') || 'No hay clientes registrados.';
-
-        const stockGeneral = cuentasStock?.map(s => 
-            `• ID: ${s.id} | ${s.plataforma} | Correo: ${s.correo} | Clave: ${s.clave || '-'} | Perfil: ${s.perfil || '-'} | PIN: ${s.pin || '-'} | Estado: ${s.estado}`
-        ).join('\n') || 'No hay cuentas registradas.';
-
-        const historialConversacion = (ultimosMensajes || []).reverse().map(m => 
-            `[Rol: ${m.role}]: ${m.content}`
-        ).join('\n') || 'No hay mensajes previos.';
-
         const messagesFormatted = (historial && historial.length > 0) ? historial.map(m => ({ role: m.role, content: m.content })) : [];
         messagesFormatted.push({ role: 'user', content: mensaje });
 
         const tools = [
-            { name: "guardar_instruccion", description: "Guarda una nueva regla para ALICE.", input_schema: { type: "object", properties: { instruccion: { type: "string" } }, required: ["instruccion"] } },
-            { name: "guardar_cliente", description: "Registra un cliente manualmente.", input_schema: { type: "object", properties: { nombre: { type: "string" }, telefono: { type: "string" }, chances: { type: "number" } }, required: ["nombre", "telefono"] } },
-            { name: "guardar_stock", description: "Guarda cuentas nuevas.", input_schema: { type: "object", properties: { plataforma: { type: "string" }, correo: { type: "string" }, clave: { type: "string" }, perfiles: { type: "array", items: { type: "object", properties: { perfil: { type: "string" }, pin: { type: "string" }, estado: { type: "string", enum: ["disponible", "ocupado"] }, telefono_cliente: { type: "string" } }, required: ["perfil", "estado"] } } }, required: ["plataforma", "correo", "clave", "perfiles"] } },
-            { name: "dar_cuenta", description: "Busca y asigna una cuenta libre.", input_schema: { type: "object", properties: { plataforma: { type: "string" }, telefono_cliente: { type: "string" } }, required: ["plataforma", "telefono_cliente"] } },
-            { name: "actualizar_credenciales", description: "Edita clave/PIN.", input_schema: { type: "object", properties: { correo: { type: "string" }, nueva_clave: { type: "string" }, nuevo_pin: { type: "string" }, perfil: { type: "string" } }, required: ["correo"] } }
+            { name: "guardar_cliente", description: "Registra un cliente manualmente.", input_schema: { type: "object", properties: { nombre: { type: "string" }, telefono: { type: "string" } }, required: ["nombre", "telefono"] } },
+            { name: "dar_cuenta", description: "Busca stock y asinga cuenta. DEBES pasarle al cliente los datos devueltos.", input_schema: { type: "object", properties: { plataforma: { type: "string" }, telefono_cliente: { type: "string" } }, required: ["plataforma", "telefono_cliente"] } }
         ];
 
         let response = await client.messages.create({
             model: 'claude-sonnet-4-6',
             max_tokens: 900,
             tools: tools,
-            system: (typeof SYSTEM_PROMPT !== 'undefined' ? SYSTEM_PROMPT : 'Eres ALICE, un bot asistente.') + 
-                `\n\n[INSTRUCCIONES PERMANENTES]:\n${instruccionesExtra}\n\n` +
-                `[INFO INTERNA]:\n1. CLIENTES:\n${listaClientes}\n\n2. TODAS LAS CUENTAS:\n${stockGeneral}\n\n3. HISTORIAL DE ESTE CHAT:\n${historialConversacion}`,
+            system: SYSTEM_PROMPT + `\n\n[INFO INTERNA]\n1. CLIENTES:\n${listaClientes}\n\n2. TODAS LAS CUENTAS:\n${stockGeneral}`,
             messages: messagesFormatted
         });
 
@@ -427,101 +310,42 @@ app.post('/api/chat-bot', async (req, res) => {
             const toolUseBlock = response.content.find(block => block.type === "tool_use");
             if (toolUseBlock) {
                 let toolResultContent = "";
-
                 try {
-                    if (toolUseBlock.name === "guardar_instruccion") {
-                        const { instruccion } = toolUseBlock.input;
-                        const { error } = await supabase.from('bot_instrucciones').insert({ instruccion });
-                        toolResultContent = !error ? `Instrucción guardada: "${instruccion}"` : `Error: ${error.message}`;
-                    }
-                    else if (toolUseBlock.name === "guardar_cliente") {
-                        const { nombre, telefono, chances } = toolUseBlock.input;
-                        const { error } = await supabase.from('CLIENTES').insert({ nombre, telefono, chances: chances || 0 });
-                        toolResultContent = !error ? `Cliente ${nombre} guardado.` : `Error: ${error.message}`;
-                    }
-                    else if (toolUseBlock.name === "guardar_stock") {
-                        const { plataforma, correo, clave, perfiles } = toolUseBlock.input;
-                        const registros = perfiles.map(p => ({ plataforma, correo, clave: clave || '', perfil: p.perfil || '', pin: p.pin || '', estado: p.estado || 'disponible', telefono: p.telefono_cliente || null }));
-                        const { error } = await supabase.from('CUENTAS').insert(registros);
-                        toolResultContent = !error ? `Cuenta guardada.` : `Error: ${error.message}`;
-                    } 
-                    else if (toolUseBlock.name === "dar_cuenta") {
+                    if (toolUseBlock.name === "dar_cuenta") {
                         const { plataforma, telefono_cliente } = toolUseBlock.input;
                         const stockDisp = cuentasStock?.filter(s => String(s.estado || '').toLowerCase().trim() === 'disponible') || [];
-                        const cuentaLibre = stockDisp.find(s => s.plataforma.toLowerCase() === plataforma.toLowerCase());
+                        
+                        const platBuscada = plataforma.toLowerCase().trim().split(' ')[0];
+                        const cuentaLibre = stockDisp.find(s => String(s.plataforma).toLowerCase().includes(platBuscada));
 
                         if (cuentaLibre) {
                             const { error } = await supabase.from('CUENTAS').update({ estado: 'ocupado', telefono: telefono_cliente }).eq('id', cuentaLibre.id);
-                            toolResultContent = !error ? `Cuenta entregada.` : `Error: ${error.message}`;
+                            notifyOwner(telefono_cliente, `🎉 ¡VENTA AUTOMÁTICA REALIZADA!\nALICE acaba de entregar una cuenta de ${cuentaLibre.plataforma}.\nPor favor, verificá la transferencia del cliente.`);
+                            toolResultContent = !error 
+                                ? `Cuenta asignada. DEBES DARLE ESTOS DATOS: Plataforma: ${cuentaLibre.plataforma} | Correo: ${cuentaLibre.correo} | Clave: ${cuentaLibre.clave || '-'} | Perfil: ${cuentaLibre.perfil || '-'} | PIN: ${cuentaLibre.pin || '-'}` 
+                                : `Error DB: ${error.message}`;
                         } else {
                             toolResultContent = `No hay stock disponible de ${plataforma}.`;
                         }
                     }
-                    else if (toolUseBlock.name === "actualizar_credenciales") {
-                        const { correo, nueva_clave, nuevo_pin, perfil } = toolUseBlock.input;
-                        let updateData = {};
-                        if (nueva_clave) updateData.clave = nueva_clave;
-                        if (nuevo_pin) updateData.pin = nuevo_pin;
-                        let query = supabase.from('CUENTAS').update(updateData).eq('correo', correo);
-                        if (perfil) query = query.eq('perfil', perfil);
-                        const { error } = await query;
-                        toolResultContent = !error ? `Credenciales actualizadas.` : `Error: ${error.message}`;
-                    }
-                } catch (toolErr) {
-                    toolResultContent = `Error en herramienta: ${toolErr.message}`;
-                }
-
-                if (phone && phone !== 'PanelWeb') {
-                    await supabase.from('messages').insert({
-                        phone: 'PanelWeb',
-                        role: 'assistant',
-                        content: `🚨 **[REPORTE DE ALICE]**: Acabo de usar la acción '${toolUseBlock.name}' para el número +${phone}.\n📝 Resultado: ${toolResultContent}`
-                    });
-                }
+                } catch (toolErr) { toolResultContent = `Error: ${toolErr.message}`; }
 
                 messagesFormatted.push({ role: 'assistant', content: response.content });
                 messagesFormatted.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUseBlock.id, content: toolResultContent }] });
 
                 const finalResponse = await client.messages.create({
-                    model: 'claude-sonnet-4-6',
-                    max_tokens: 600,
-                    tools: tools,
-                    system: (typeof SYSTEM_PROMPT !== 'undefined' ? SYSTEM_PROMPT : 'Eres ALICE.'),
-                    messages: messagesFormatted
+                    model: 'claude-sonnet-4-6', max_tokens: 600, tools: tools,
+                    system: SYSTEM_PROMPT, messages: messagesFormatted
                 });
-
-                const textBlock = finalResponse.content.find(block => block.type === 'text');
-                replyText = textBlock ? textBlock.text : 'Acción ejecutada.';
+                replyText = finalResponse.content.find(block => block.type === 'text')?.text || 'Listo.';
             }
         } else {
-            const textBlock = response.content.find(block => block.type === 'text');
-            replyText = textBlock ? textBlock.text : 'Respuesta procesada.';
+            replyText = response.content.find(block => block.type === 'text')?.text || 'OK.';
         }
 
-        await supabase.from('messages').insert({
-            phone: remitente,
-            role: 'assistant',
-            content: replyText
-        });
-
+        await supabase.from('messages').insert({ phone: remitente, role: 'assistant', content: replyText });
         res.json({ success: true, reply: replyText });
 
-    } catch (e) {
-        console.error('Error en /api/chat-bot:', e.message);
-        res.status(500).json({ success: false, error: e.message });
-    }
-});
-
-app.get('/api/historial-panel', async (req, res) => {
-    try {
-        const { data: mensajes } = await supabase
-            .from('messages')
-            .select('*')
-            .eq('phone', 'PanelWeb')
-            .order('created_at', { ascending: true })
-            .limit(50);
-            
-        res.json({ success: true, mensajes: mensajes || [] });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
@@ -530,89 +354,48 @@ app.get('/api/historial-panel', async (req, res) => {
 // ==========================================
 // RUTAS PARA EL PANEL WEB (BOTONES FÍSICOS)
 // ==========================================
-
-app.delete('/api/clientes/:id', async (req, res) => {
-    try {
-        const { error } = await supabase.from('CLIENTES').delete().eq('id', req.params.id);
-        if (error) throw error;
-        res.json({ success: true, message: 'Cliente eliminado correctamente' });
-    } catch (e) {
-        res.status(500).json({ success: false, error: e.message });
-    }
-});
-
-app.delete('/api/cuentas/:id', async (req, res) => {
-    try {
-        const { error } = await supabase.from('CUENTAS').delete().eq('id', req.params.id);
-        if (error) throw error;
-        res.json({ success: true, message: 'Cuenta eliminada correctamente' });
-    } catch (e) {
-        res.status(500).json({ success: false, error: e.message });
-    }
-});
-
+app.delete('/api/clientes/:id', async (req, res) => { await supabase.from('CLIENTES').delete().eq('id', req.params.id); res.json({ success: true }); });
+app.delete('/api/cuentas/:id', async (req, res) => { await supabase.from('CUENTAS').delete().eq('id', req.params.id); res.json({ success: true }); });
 app.put('/api/cuentas/:id', async (req, res) => {
     try {
-        const { clave, pin, estado, telefono } = req.body;
-        const { error } = await supabase.from('CUENTAS').update({
-            clave, 
-            pin, 
-            estado, 
-            telefono
-        }).eq('id', req.params.id);
-        
+        const { plataforma, correo, clave, pin, perfil, estado, telefono } = req.body;
+        let updateObj = {};
+        if (plataforma !== undefined) updateObj.plataforma = plataforma;
+        if (correo !== undefined) updateObj.correo = correo;
+        if (clave !== undefined) updateObj.clave = clave;
+        if (pin !== undefined) updateObj.pin = pin;
+        if (perfil !== undefined) updateObj.perfil = perfil;
+        if (estado !== undefined) updateObj.estado = estado;
+        if (telefono !== undefined) updateObj.telefono = telefono;
+
+        const { error } = await supabase.from('CUENTAS').update(updateObj).eq('id', req.params.id);
         if (error) throw error;
         res.json({ success: true, message: 'Cuenta actualizada correctamente' });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
 });
-
-app.get('/api/clientes', async (req, res) => {
-    try {
-        const fullClientes = await fetchFullClientes();
-        res.json(fullClientes);
-    } catch (e) {
-        res.status(500).json({ success: false, error: e.message });
-    }
-});
-
+app.get('/api/clientes', async (req, res) => { res.json(await fetchFullClientes()); });
 app.post('/api/agregar-stock', async (req, res) => {
     const { plataforma, correo, clave, password, perfil, pin } = req.body;
-    const passValue = clave || password || '';
-    await supabase.from('CUENTAS').insert([{
-        plataforma: plataforma || 'General',
-        correo,
-        clave: passValue,
-        perfil: perfil || '',
-        pin: pin || '',
-        estado: 'disponible'
-    }]);
+    await supabase.from('CUENTAS').insert([{ plataforma: plataforma||'General', correo, clave: clave||password||'', perfil: perfil||'', pin: pin||'', estado: 'disponible' }]);
     res.json({ success: true });
 });
-
 app.post('/api/eliminar-cliente', async (req, res) => {
-    const { clientId } = req.body;
-    try {
-        const idNum = Number(clientId);
-        await supabase.from('CUENTAS').delete().eq('cliente_id', idNum);
-        await supabase.from('SERVICIOS').delete().eq('cliente_id', idNum);
-        await supabase.from('CLIENTES').delete().eq('id', idNum);
-        res.json({ success: true });
-    } catch(e) {
-        res.status(500).json({ success: false, error: e.message });
-    }
+    const idNum = Number(req.body.clientId);
+    await supabase.from('CUENTAS').delete().eq('cliente_id', idNum);
+    await supabase.from('SERVICIOS').delete().eq('cliente_id', idNum);
+    await supabase.from('CLIENTES').delete().eq('id', idNum);
+    res.json({ success: true });
 });
-
 app.post('/api/control-bot', async (req, res) => {
-    const { accion, valor } = req.body;
-    if (accion === 'pausa_global') pausedChats['TODOS'] = valor;
-    if (accion === 'promo') promoActiva = valor ? valor : null;
+    if (req.body.accion === 'pausa_global') pausedChats['TODOS'] = req.body.valor;
+    if (req.body.accion === 'promo') promoActiva = req.body.valor ? req.body.valor : null;
     res.json({ success: true });
 });
 
 // ==========================================
-// INTERFAZ GRÁFICA DEL PANEL WEB
+// INTERFAZ GRÁFICA DEL PANEL WEB (COMPLETA)
 // ==========================================
 app.get('/', (req, res) => {
     const html = `
@@ -672,7 +455,6 @@ app.get('/', (req, res) => {
     </head>
     <body>
 
-        <!-- LOGIN -->
         <div id="loginScreen">
             <h2>NEXXUS Panel</h2>
             <form id="formLogin">
@@ -682,7 +464,6 @@ app.get('/', (req, res) => {
             </form>
         </div>
 
-        <!-- DASHBOARD CONTAINER -->
         <div id="dashboardContainer">
             <header>
                 <h2>⚡ NEXXUS Control Panel</h2>
@@ -726,7 +507,7 @@ app.get('/', (req, res) => {
                 </table>
             </div>
 
-            <!-- TAB 3: STOCK CUENTAS SEPARADO POR SERVICIOS -->
+            <!-- TAB 3: STOCK -->
             <div id="tabStock" class="tab-content">
                 <h3>Cargar Nueva Cuenta al Stock Disponible</h3>
                 <form id="formCargarStock" style="margin-bottom:25px;">
@@ -742,13 +523,12 @@ app.get('/', (req, res) => {
                 <div id="contenedorStockPorServicio"></div>
             </div>
 
-            <!-- TAB 4: CHAT DIRECTO CON ALICE & CONTROL BOT -->
+            <!-- TAB 4: BOT -->
             <div id="tabBot" class="tab-content">
                 <h3>💬 Hablar Directamente con ALICE</h3>
-                <p style="color:var(--muted); font-size:0.85rem; margin-bottom:10px;">Podés consultarle dudas o pedirle información sobre tus clientes y chances de sorteo.</p>
                 <div class="chat-container">
                     <div class="chat-messages" id="chatMessages">
-                        <div class="chat-msg bot">¡Hola Ryan! ¿En qué te ayudo hoy? Conozco tus clientes y stock. 😊</div>
+                        <div class="chat-msg bot">¡Hola Ryan! ¿En qué te ayudo hoy? 😊</div>
                     </div>
                     <div class="chat-input-row">
                         <button onclick="limpiarChat()" style="background:#ef4444; color:white; border:none; border-radius:6px; cursor:pointer; width:auto; padding:0 15px;" title="Borrar memoria">🗑️</button>
@@ -770,7 +550,7 @@ app.get('/', (req, res) => {
                 <button onclick="desactivarPromo()" style="max-width:250px; background:#ef4444; color:#fff; border:none; padding:12px; border-radius:6px; cursor:pointer;">Apagar Promo</button>
             </div>
 
-            <!-- TAB 5: AGREGAR CLIENTE -->
+            <!-- TAB 5: AGREGAR -->
             <div id="tabAgregar" class="tab-content">
                 <h3>Agregar / Registrar Nuevo Cliente</h3>
                 <form id="formAddClient">
@@ -786,10 +566,9 @@ app.get('/', (req, res) => {
                     <button type="submit" class="btn-primary">Registrar Cliente en Supabase</button>
                 </form>
             </div>
-
         </div>
 
-        <!-- MODAL EDITAR COMPLETO -->
+        <!-- MODAL EDITAR CLIENTE (COMPLETO) -->
         <div id="editModal" class="modal">
             <div class="modal-box">
                 <h3>✏️ Editar Datos del Cliente</h3>
@@ -818,7 +597,7 @@ app.get('/', (req, res) => {
             </div>
         </div>
 
-        <!-- MODAL ENVIAR MENSAJE WHATSAPP -->
+        <!-- MODAL ENVIAR MENSAJE -->
         <div id="msgModal" class="modal">
             <div class="modal-box">
                 <h3>💬 Enviar WhatsApp al Cliente</h3>
@@ -831,32 +610,17 @@ app.get('/', (req, res) => {
         </div>
 
         <script>
-            let localClientes = [];
-            let localCuentas = [];
-            let botPausadoEstado = false;
-            let webChatHistory = [];
+            let localClientes = [], localCuentas = [], botPausadoEstado = false, webChatHistory = [];
 
             document.getElementById('formLogin').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const user = document.getElementById('loginUser').value;
                 const pass = document.getElementById('loginPass').value;
-                
                 try {
-                    const res = await fetch('/api/login', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ user, pass })
-                    });
-                    
-                    if (res.ok) {
-                        sessionStorage.setItem('nexxus_auth', '1');
-                        checkAuth();
-                    } else {
-                        alert('❌ Credenciales incorrectas');
-                    }
-                } catch(error) {
-                    alert('❌ Error de conexión al servidor.');
-                }
+                    const res = await fetch('/api/login', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ user, pass }) });
+                    if (res.ok) { sessionStorage.setItem('nexxus_auth', '1'); checkAuth(); } 
+                    else { alert('❌ Credenciales incorrectas'); }
+                } catch(error) { alert('❌ Error de conexión al servidor.'); }
             });
 
             function checkAuth() {
@@ -867,10 +631,7 @@ app.get('/', (req, res) => {
                 }
             }
 
-            function logout() {
-                sessionStorage.removeItem('nexxus_auth');
-                location.reload();
-            }
+            function logout() { sessionStorage.removeItem('nexxus_auth'); location.reload(); }
 
             function switchTab(tabId) {
                 document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
@@ -896,12 +657,10 @@ app.get('/', (req, res) => {
 
                     renderClientesTable(localClientes);
                     renderStockPorServicios(localCuentas);
-                    restaurarMemoriaChat();
-                } catch(e) {
-                    console.error("Error cargando dashboard:", e);
-                }
+                } catch(e) { console.error("Error cargando dashboard:", e); }
             }
 
+            // AQUI SE AGREGA EL ID AL LADO DEL NOMBRE PARA SABER QUIÉN ES QUIÉN
             function renderClientesTable(lista) {
                 const tbody = document.getElementById('tblClientes');
                 tbody.innerHTML = '';
@@ -912,7 +671,7 @@ app.get('/', (req, res) => {
                         : 'Sin datos';
                     
                     tbody.innerHTML += "<tr>" +
-                       "<td><strong>#" + c.id + " - " + c.nombre + "</strong></td>" +
+                        "<td><strong>#" + c.id + " - " + c.nombre + "</strong></td>" +
                         "<td>+" + c.telefono + "</td>" +
                         "<td>" + (cuenta.plataforma || 'Sin servicio') + "</td>" +
                         "<td><small>" + mailPass + "</small></td>" +
@@ -927,25 +686,18 @@ app.get('/', (req, res) => {
                 });
             }
 
+            // RESTAURAMOS EL DISEÑO HERMOSO (BARRAS VERDES Y ROJAS ACORDEON)
             function renderStockPorServicios(lista) {
                 const contenedor = document.getElementById('contenedorStockPorServicio');
                 contenedor.innerHTML = '';
-
-                if (!lista || lista.length === 0) {
-                    contenedor.innerHTML = '<p style="color:var(--muted); padding:10px;">No hay cuentas en el inventario.</p>';
-                    return;
-                }
+                if (!lista || lista.length === 0) { contenedor.innerHTML = '<p style="color:var(--muted); padding:10px;">No hay cuentas.</p>'; return; }
 
                 const plataformas = {};
                 lista.forEach(s => {
                     const plat = (s.plataforma || 'General').trim();
                     if (!plataformas[plat]) plataformas[plat] = { libres: [], ocupadas: [] };
-                    
-                    if (s.cliente_id || String(s.estado).toLowerCase() !== 'disponible') {
-                        plataformas[plat].ocupadas.push(s);
-                    } else {
-                        plataformas[plat].libres.push(s);
-                    }
+                    if (s.cliente_id || String(s.estado).toLowerCase() !== 'disponible') { plataformas[plat].ocupadas.push(s); } 
+                    else { plataformas[plat].libres.push(s); }
                 });
 
                 function renderSubGrupo(cuentas, tipo) {
@@ -961,8 +713,7 @@ app.get('/', (req, res) => {
                     let html = '';
                     for (const [mail, listaCuentas] of Object.entries(porCorreo)) {
                         listaCuentas.sort((a, b) => {
-                            const pA = String(a.perfil || '');
-                            const pB = String(b.perfil || '');
+                            const pA = String(a.perfil || ''); const pB = String(b.perfil || '');
                             return pA.localeCompare(pB, undefined, {numeric: true, sensitivity: 'base'});
                         });
 
@@ -970,51 +721,37 @@ app.get('/', (req, res) => {
 
                         html += '<div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 15px; overflow: hidden;">' +
                                     '<div style="background: #1e293b; padding: 10px 15px; font-weight: bold; font-size: 0.95rem; border-bottom: 1px solid var(--border);">' +
-                                        '📧 <span style="color: var(--accent);">' + mail + '</span> ' +
-                                        '<span style="color: var(--muted); font-size: 0.85rem; font-weight: normal; margin-left: 10px;">(Clave: ' + clave + ')</span>' +
+                                        '📧 <span style="color: var(--accent);">' + mail + '</span> <span style="color: var(--muted); font-size: 0.85rem; font-weight: normal; margin-left: 10px;">(Clave: ' + clave + ')</span>' +
                                     '</div>' +
                                     '<div style="padding: 0;">' +
                                         '<table style="margin: 0; width: 100%; border-collapse: collapse; font-size: 0.85rem; background: transparent;">' +
-                                            '<thead>' +
-                                                '<tr>' +
-                                                    '<th style="background: transparent; padding: 8px 15px;">Perfil</th>' +
-                                                    '<th style="background: transparent; padding: 8px 15px;">PIN</th>';
-                        
-                        if (tipo === 'ocupada') {
-                            html += '<th style="background: transparent; padding: 8px 15px;">Asignado a ID</th>';
-                        }
-                        
-                        html += '<th style="background: transparent; padding: 8px 15px; text-align: right;">Acciones</th>' +
-                                                '</tr>' +
-                                            '</thead>' +
-                                            '<tbody>';
+                                            '<thead><tr><th style="background: transparent; padding: 8px 15px;">Perfil</th><th style="background: transparent; padding: 8px 15px;">PIN</th>';
+                        if (tipo === 'ocupada') { html += '<th style="background: transparent; padding: 8px 15px;">Asignado a ID</th>'; }
+                        html += '<th style="background: transparent; padding: 8px 15px; text-align: right;">Acciones</th></tr></thead><tbody>';
                         
                         listaCuentas.forEach(s => {
                             const asig = s.cliente_id ? '<span style="color:#3b82f6; font-weight:bold;">#' + s.cliente_id + '</span>' : '-';
                             const id = s.id || '';
-                            const sClave = s.clave || '';
-                            const sPin = s.pin || '';
+                            const safePlat = (s.plataforma || '').replace(/'/g, "\\'");
+                            const safeCorr = (s.correo || '').replace(/'/g, "\\'");
+                            const safeClave = (s.clave || '').replace(/'/g, "\\'");
+                            const safePin = (s.pin || '').replace(/'/g, "\\'");
+                            const safePerf = (s.perfil || '').replace(/'/g, "\\'");
                             
                             html += '<tr style="border-top: 1px solid #334155;">' +
-                                        '<td style="padding: 8px 15px;"><strong>P: ' + (s.perfil || '-') + '</strong></td>' +
-                                        '<td style="padding: 8px 15px;"><strong>' + (s.pin || '-') + '</strong></td>';
+                                        '<td style="padding: 8px 15px;"><strong>P: ' + safePerf + '</strong></td>' +
+                                        '<td style="padding: 8px 15px;"><strong>' + safePin + '</strong></td>';
                             
-                            if (tipo === 'ocupada') {
-                                html += '<td style="padding: 8px 15px;">' + asig + '</td>';
-                            }
-                            
+                            if (tipo === 'ocupada') { html += '<td style="padding: 8px 15px;">' + asig + '</td>'; }
                             html += '<td style="padding: 8px 15px; text-align: right;">';
                             
-                            if (tipo === 'libre') {
-                                html += '<button style="padding:5px 10px; font-size:0.8rem; margin-right:5px; background:#3b82f6; border:none; border-radius:4px; color:white; cursor:pointer;" onclick="abrirModalAsignar(&quot;' + id + '&quot;)">👤 Asignar</button>';
-                            }
+                            if (tipo === 'libre') { html += '<button style="padding:5px 10px; font-size:0.8rem; margin-right:5px; background:#3b82f6; border:none; border-radius:4px; color:white; cursor:pointer;" onclick="abrirModalAsignar(\'' + id + '\')">👤 Asignar</button>'; }
                             
-                            html += '<button class="btn-edit" style="padding:5px 10px; font-size:0.8rem; margin-right:5px;" onclick="editarStockRapido(&quot;' + id + '&quot;, &quot;' + sClave + '&quot;, &quot;' + sPin + '&quot;)">✏️ Editar</button>' +
-                                    '<button class="btn-danger" style="padding:5px 10px; font-size:0.8rem;" onclick="eliminarStockRapido(&quot;' + id + '&quot;)">🗑️</button>' +
-                                        '</td>' +
-                                    '</tr>';
+                            // NUEVO: EL BOTON EDITAR AHORA PASA TODOS LOS PARAMETROS (INCLUIDA PLATAFORMA Y CORREO)
+                            html += '<button class="btn-edit" style="padding:5px 10px; font-size:0.8rem; margin-right:5px;" onclick="editarStockRapido(\'' + id + '\', \'' + safePlat + '\', \'' + safeCorr + '\', \'' + safeClave + '\', \'' + safePin + '\', \'' + safePerf + '\')">✏️ Editar</button>' +
+                                    '<button class="btn-danger" style="padding:5px 10px; font-size:0.8rem;" onclick="eliminarStockRapido(\'' + id + '\')">🗑️</button>' +
+                                        '</td></tr>';
                         });
-
                         html += '</tbody></table></div></div>';
                     }
                     return html;
@@ -1031,145 +768,88 @@ app.get('/', (req, res) => {
                         '<div style="padding: 15px;">' +
                             '<details style="margin-bottom: 15px; background: rgba(16, 185, 129, 0.05); border-radius: 6px; border: 1px solid #10b98140;" open>' +
                                 '<summary style="padding: 12px 15px; font-weight: bold; cursor: pointer; color: #10b981; list-style: none; display: flex; justify-content: space-between; align-items: center;">' +
-                                    '<span style="font-size: 1rem;">🟢 Disponibles (' + totalLibres + ')</span>' +
-                                    '<span style="font-size: 0.8rem; color: var(--muted);">Tocar para Ver/Ocultar 🔽</span>' +
+                                    '<span style="font-size: 1rem;">🟢 Disponibles (' + totalLibres + ')</span><span style="font-size: 0.8rem; color: var(--muted);">Tocar para Ver/Ocultar 🔽</span>' +
                                 '</summary>' +
-                                '<div style="padding: 15px; border-top: 1px solid #10b98140;">' +
-                                    renderSubGrupo(data.libres, 'libre') +
-                                '</div>' +
+                                '<div style="padding: 15px; border-top: 1px solid #10b98140;">' + renderSubGrupo(data.libres, 'libre') + '</div>' +
                             '</details>' +
                             '<details style="background: rgba(239, 68, 68, 0.05); border-radius: 6px; border: 1px solid #ef444440;">' +
                                 '<summary style="padding: 12px 15px; font-weight: bold; cursor: pointer; color: #ef4444; list-style: none; display: flex; justify-content: space-between; align-items: center;">' +
-                                    '<span style="font-size: 1rem;">🔴 Ocupados (' + totalOcupadas + ')</span>' +
-                                    '<span style="font-size: 0.8rem; color: var(--muted);">Tocar para Ver/Ocultar 🔽</span>' +
+                                    '<span style="font-size: 1rem;">🔴 Ocupados (' + totalOcupadas + ')</span><span style="font-size: 0.8rem; color: var(--muted);">Tocar para Ver/Ocultar 🔽</span>' +
                                 '</summary>' +
-                                '<div style="padding: 15px; border-top: 1px solid #ef444440;">' +
-                                    renderSubGrupo(data.ocupadas, 'ocupada') +
-                                '</div>' +
+                                '<div style="padding: 15px; border-top: 1px solid #ef444440;">' + renderSubGrupo(data.ocupadas, 'ocupada') + '</div>' +
                             '</details>' +
-                        '</div>' +
-                    '</div>';
-                    
+                        '</div></div>';
                     contenedor.innerHTML += platHtml;
                 }
             }
 
             async function abrirModalAsignar(idCuenta) {
                 try {
-                    const res = await fetch('/api/clientes');
-                    const clientes = await res.json();
+                    const res = await fetch('/api/clientes'); const clientes = await res.json();
                     const lista = Array.isArray(clientes) ? clientes : (clientes.data || []);
-                    
                     let opciones = '<option value="">-- Seleccionar un Cliente --</option>';
-                    lista.forEach(c => {
-                        opciones += '<option value="' + c.id + '">#' + c.id + ' - ' + c.nombre + ' (' + (c.telefono || 'Sin número') + ')</option>';
-                    });
+                    lista.forEach(c => { opciones += '<option value="' + c.id + '">#' + c.id + ' - ' + c.nombre + ' (' + (c.telefono || 'Sin número') + ')</option>'; });
 
                     const modal = document.createElement('div');
                     modal.id = 'modalAsignar';
                     modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); display:flex; justify-content:center; align-items:center; z-index:9999;';
                     modal.innerHTML = 
                         '<div style="background:#1e293b; padding:25px; border-radius:10px; border:1px solid #3b82f6; width:90%; max-width:400px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">' +
-                            '<h3 style="color:white; margin-top:0; border-bottom:1px solid #334155; padding-bottom:10px;">👤 Asignar Cuenta a Cliente</h3>' +
-                            '<p style="color:var(--muted); font-size:0.9rem; margin-bottom:15px;">Seleccioná al cliente de la lista para vincular este perfil:</p>' +
-                            '<select id="selectClienteModal" style="width:100%; padding:10px; margin-bottom:20px; border-radius:5px; background:#0f172a; color:white; border:1px solid #475569; outline:none;">' +
-                                opciones +
-                            '</select>' +
+                            '<h3 style="color:white; margin-top:0; border-bottom:1px solid #334155; padding-bottom:10px;">👤 Asignar Cuenta</h3>' +
+                            '<select id="selectClienteModal" style="width:100%; padding:10px; margin-bottom:20px; border-radius:5px; background:#0f172a; color:white; border:1px solid #475569; outline:none;">' + opciones + '</select>' +
                             '<div style="display:flex; justify-content:flex-end; gap:10px;">' +
-                                '<button onclick="document.getElementById(&quot;modalAsignar&quot;).remove()" style="background:#475569; padding:8px 15px; border:none; border-radius:5px; color:white; cursor:pointer;">Cancelar</button>' +
-                                '<button onclick="confirmarAsignacion(&quot;' + idCuenta + '&quot;)" style="background:#10b981; padding:8px 15px; border:none; border-radius:5px; color:white; cursor:pointer; font-weight:bold;">✅ Confirmar</button>' +
-                            '</div>' +
-                        '</div>';
+                                '<button onclick="document.getElementById(\'modalAsignar\').remove()" style="background:#475569; padding:8px 15px; border:none; border-radius:5px; color:white; cursor:pointer;">Cancelar</button>' +
+                                '<button onclick="confirmarAsignacion(\'' + idCuenta + '\')" style="background:#10b981; padding:8px 15px; border:none; border-radius:5px; color:white; cursor:pointer; font-weight:bold;">✅ Confirmar</button>' +
+                            '</div></div>';
                     document.body.appendChild(modal);
-                } catch (e) {
-                    alert('Error al cargar la lista de clientes.');
-                }
+                } catch (e) { alert('Error al cargar clientes.'); }
             }
 
             async function confirmarAsignacion(idCuenta) {
                 const clienteId = document.getElementById('selectClienteModal').value;
-                if (!clienteId) {
-                    alert('⚠️ Por favor, seleccioná un cliente de la lista.');
-                    return;
-                }
-
+                if (!clienteId) return alert('⚠️ Seleccioná un cliente.');
                 try {
-                    const res = await fetch('/api/asignar-cuenta', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ cuenta_id: idCuenta, cliente_id: clienteId })
-                    });
+                    const res = await fetch('/api/asignar-cuenta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cuenta_id: idCuenta, cliente_id: clienteId }) });
                     const data = await res.json();
-                    
-                    if (data.success) {
-                        document.getElementById('modalAsignar').remove();
-                        alert('¡Cuenta asignada con éxito! ✅');
-                        location.reload(); 
-                    } else {
-                        alert('Error al asignar: ' + data.error);
-                    }
-                } catch(e) {
-                    alert('Error de conexión con el servidor.');
-                }
+                    if (data.success) { document.getElementById('modalAsignar').remove(); alert('✅ ¡Asignada!'); location.reload(); } 
+                    else { alert('Error: ' + data.error); }
+                } catch(e) { alert('Error de conexión.'); }
             }
 
             async function eliminarStockRapido(id) {
-                if(confirm("⚠️ ¿Seguro que deseas eliminar esta cuenta del stock?")) {
+                if(confirm("⚠️ ¿Seguro que deseas eliminar esta cuenta?")) {
                     try {
                         const res = await fetch('/api/cuentas/' + id, { method: 'DELETE' });
-                        const data = await res.json();
-                        if (data.success) {
-                            alert("✅ Cuenta eliminada del stock.");
-                            loadDashboardData();
-                        } else {
-                            alert("❌ Error: " + data.error);
-                        }
-                    } catch(e) {
-                        alert("❌ Error de conexión: " + e.message);
-                    }
+                        if ((await res.json()).success) { alert("✅ Eliminada."); loadDashboardData(); }
+                    } catch(e) { alert("❌ Error: " + e.message); }
                 }
             }
 
-            async function editarStockRapido(id, claveActual, pinActual) {
-                const nuevaClave = prompt("Ingresá la nueva CLAVE (dejá igual si no cambia):", claveActual);
-                if (nuevaClave === null) return; 
-
-                const nuevoPin = prompt("Ingresá el nuevo PIN (dejá igual si no cambia):", pinActual);
-                if (nuevoPin === null) return;
+            // NUEVO: ESTE BOTON AHORA TE DEJA ARREGLAR LAS PLATAFORMAS Y LOS CORREOS SUELTOS
+            async function editarStockRapido(id, pPlat, pCorr, pClave, pPin, pPerf) {
+                const nPlat = prompt("Plataforma oficial (Ej: Disney+, Netflix, etc):", pPlat); if (nPlat === null) return; 
+                const nCorr = prompt("Correo de la cuenta:", pCorr); if (nCorr === null) return;
+                const nPerf = prompt("Perfil asignado:", pPerf); if (nPerf === null) return;
+                const nClave = prompt("Contraseña / Clave:", pClave); if (nClave === null) return; 
+                const nPin = prompt("PIN del perfil:", pPin); if (nPin === null) return;
 
                 try {
                     const res = await fetch('/api/cuentas/' + id, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ clave: nuevaClave, pin: nuevoPin })
+                        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ plataforma: nPlat, correo: nCorr, perfil: nPerf, clave: nClave, pin: nPin })
                     });
-                    const data = await res.json();
-                    if (data.success) {
-                        alert("✅ ¡Cuenta actualizada!");
-                        loadDashboardData();
-                    } else {
-                        alert("❌ Error al editar: " + data.error);
-                    }
-                } catch(e) {
-                    alert("❌ Error de conexión: " + e.message);
-                }
+                    if ((await res.json()).success) { alert("✅ ¡Cuenta actualizada y re-agrupada con éxito!"); loadDashboardData(); } 
+                } catch(e) { alert("❌ Error: " + e.message); }
             }
 
             function filterClientes() {
                 const q = document.getElementById('searchClient').value.toLowerCase();
-                const filtered = localClientes.filter(c => 
-                    c.nombre.toLowerCase().includes(q) || 
-                    c.telefono.includes(q) || 
-                    (c.cuenta?.plataforma || '').toLowerCase().includes(q)
-                );
-                renderClientesTable(filtered);
+                renderClientesTable(localClientes.filter(c => c.nombre.toLowerCase().includes(q) || c.telefono.includes(q) || (c.cuenta?.plataforma || '').toLowerCase().includes(q)));
             }
 
             function openEditModal(index) {
-                const clientObj = localClientes[index];
-                if (!clientObj) return;
+                const clientObj = localClientes[index]; if (!clientObj) return;
                 const cuenta = clientObj.cuenta || {};
-
                 document.getElementById('editClientId').value = clientObj.id;
                 document.getElementById('editNom').value = clientObj.nombre || '';
                 document.getElementById('editTel').value = clientObj.telefono || '';
@@ -1180,58 +860,32 @@ app.get('/', (req, res) => {
                 document.getElementById('editPin').value = cuenta.pin || '';
                 document.getElementById('editChances').value = clientObj.chances || 0;
                 document.getElementById('editVenc').value = cuenta.fecha_vencimiento || '';
-                
                 document.getElementById('editModal').style.display = 'flex';
             }
 
             function closeEditModal() { document.getElementById('editModal').style.display = 'none'; }
 
             async function saveEditClienteCompleto() {
-                const btn = document.getElementById('btnSaveEdit');
-                btn.disabled = true;
-                btn.textContent = 'Guardando...';
-
-                const body = {
-                    clientId: document.getElementById('editClientId').value,
-                    nuevoTel: document.getElementById('editTel').value,
-                    nombre: document.getElementById('editNom').value,
-                    plataforma: document.getElementById('editPlat').value,
-                    correo: document.getElementById('editMail').value,
-                    clave: document.getElementById('editPass').value,
-                    perfil: document.getElementById('editPerfil').value,
-                    pin: document.getElementById('editPin').value,
-                    chances: document.getElementById('editChances').value,
-                    fecha_vencimiento: document.getElementById('editVenc').value
-                };
-
+                const btn = document.getElementById('btnSaveEdit'); btn.disabled = true; btn.textContent = 'Guardando...';
                 try {
                     const res = await fetch('/api/editar-cliente-completo', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify(body)
+                        method: 'POST', headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            clientId: document.getElementById('editClientId').value, nuevoTel: document.getElementById('editTel').value,
+                            nombre: document.getElementById('editNom').value, plataforma: document.getElementById('editPlat').value,
+                            correo: document.getElementById('editMail').value, clave: document.getElementById('editPass').value,
+                            perfil: document.getElementById('editPerfil').value, pin: document.getElementById('editPin').value,
+                            chances: document.getElementById('editChances').value, fecha_vencimiento: document.getElementById('editVenc').value
+                        })
                     });
-                    const data = await res.json();
-
-                    if (res.ok && data.success) {
-                        closeEditModal();
-                        alert('✅ Guardado correctamente en Supabase');
-                        await loadDashboardData();
-                    } else {
-                        alert('❌ Error al guardar en Supabase: ' + (data.error || 'Verifica los campos'));
-                    }
-                } catch(e) {
-                    alert('❌ Error de conexión: ' + e.message);
-                } finally {
-                    btn.disabled = false;
-                    btn.textContent = 'Guardar Cambios';
-                }
+                    if (res.ok) { closeEditModal(); alert('✅ Guardado'); await loadDashboardData(); }
+                } catch(e) { alert('❌ Error'); } finally { btn.disabled = false; btn.textContent = 'Guardar Cambios'; }
             }
 
             function openMsgModal(index) {
-                const clientObj = localClientes[index];
-                if (!clientObj) return;
-                document.getElementById('msgTelTarget').value = clientObj.telefono;
-                document.getElementById('lblMsgDestinatario').textContent = "Para: " + clientObj.nombre + " (+" + clientObj.telefono + ")";
+                const c = localClientes[index]; if (!c) return;
+                document.getElementById('msgTelTarget').value = c.telefono;
+                document.getElementById('lblMsgDestinatario').textContent = "Para: " + c.nombre + " (+" + c.telefono + ")";
                 document.getElementById('txtMsgContent').value = '';
                 document.getElementById('msgModal').style.display = 'flex';
             }
@@ -1242,140 +896,51 @@ app.get('/', (req, res) => {
                 const tel = document.getElementById('msgTelTarget').value;
                 const mensaje = document.getElementById('txtMsgContent').value;
                 if (!mensaje.trim()) return alert('Escribe un mensaje');
-
                 try {
-                    const res = await fetch('/api/enviar-mensaje-cliente', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ telefono: tel, mensaje })
-                    });
-
-                    if (res.ok) {
-                        alert('✅ Mensaje enviado exitosamente');
-                        closeMsgModal();
-                    } else {
-                        alert('❌ Error al enviar el mensaje');
-                    }
-                } catch(e) {
-                    alert('❌ Error de conexión.');
-                }
+                    const res = await fetch('/api/enviar-mensaje-cliente', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ telefono: tel, mensaje }) });
+                    if (res.ok) { alert('✅ Mensaje enviado'); closeMsgModal(); }
+                } catch(e) { alert('❌ Error'); }
             }
 
             async function sendWebChat() {
-                const input = document.getElementById('chatInputText');
-                const text = input.value.trim();
-                if (!text) return;
-
+                const input = document.getElementById('chatInputText'); const text = input.value.trim(); if (!text) return;
                 const chatBox = document.getElementById('chatMessages');
-                chatBox.innerHTML += "<div class='chat-msg user'>" + text + "</div>";
-                input.value = '';
-                chatBox.scrollTop = chatBox.scrollHeight;
-
+                chatBox.innerHTML += "<div class='chat-msg user'>" + text + "</div>"; input.value = ''; chatBox.scrollTop = chatBox.scrollHeight;
                 webChatHistory.push({ role: 'user', content: text });
-                localStorage.setItem('alice_chat_memoria', JSON.stringify(webChatHistory));
-
                 try {
-                    const res = await fetch('/api/chat-bot', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ mensaje: text, historial: webChatHistory })
-                    });
-
+                    const res = await fetch('/api/chat-bot', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ mensaje: text, historial: webChatHistory }) });
                     const data = await res.json();
                     if (data.success) {
                         webChatHistory.push({ role: 'assistant', content: data.reply });
-                        localStorage.setItem('alice_chat_memoria', JSON.stringify(webChatHistory));
-                        
-                        chatBox.innerHTML += "<div class='chat-msg bot'>" + data.reply + "</div>";
-                        chatBox.scrollTop = chatBox.scrollHeight;
+                        chatBox.innerHTML += "<div class='chat-msg bot'>" + data.reply + "</div>"; chatBox.scrollTop = chatBox.scrollHeight;
                     }
-                } catch(e) {
-                    chatBox.innerHTML += "<div class='chat-msg bot'>❌ Error conectando con ALICE.</div>";
-                }
-            }
-
-            function restaurarMemoriaChat() {
-                const guardado = localStorage.getItem('alice_chat_memoria');
-                if (guardado) {
-                    try {
-                        webChatHistory = JSON.parse(guardado);
-                        const chatBox = document.getElementById('chatMessages');
-                        chatBox.innerHTML = ''; 
-                        webChatHistory.forEach(msg => {
-                            const clase = msg.role === 'user' ? 'user' : 'bot';
-                            chatBox.innerHTML += "<div class='chat-msg " + clase + "'>" + msg.content + "</div>";
-                        });
-                        chatBox.scrollTop = chatBox.scrollHeight;
-                    } catch(e) {
-                        console.error("Error restaurando chat");
-                    }
-                }
-            }
-
-            function limpiarChat() {
-                if(confirm("⚠️ ¿Seguro que querés borrar toda la memoria del chat con ALICE?")) {
-                    localStorage.removeItem('alice_chat_memoria');
-                    webChatHistory = [];
-                    document.getElementById('chatMessages').innerHTML = "<div class='chat-msg bot'>¡Memoria reseteada! ¿En qué te ayudo ahora? 😊</div>";
-                }
+                } catch(e) { chatBox.innerHTML += "<div class='chat-msg bot'>❌ Error conectando con ALICE.</div>"; }
             }
 
             document.getElementById('formAddClient').addEventListener('submit', async (e) => {
                 e.preventDefault();
-                const body = {
-                    telefono: document.getElementById('addTel').value,
-                    nombre: document.getElementById('addNom').value,
-                    plataforma: document.getElementById('addPlat').value,
-                    fecha_vencimiento: document.getElementById('addVenc').value,
-                    correo: document.getElementById('addMail').value,
-                    clave: document.getElementById('addPass').value,
-                    perfil: document.getElementById('addPerfil').value,
-                    pin: document.getElementById('addPin').value,
-                    chances: document.getElementById('addChances').value
-                };
-                await fetch('/api/guardar-cliente', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-                alert('✅ Cliente registrado en Supabase');
-                document.getElementById('formAddClient').reset();
-                loadDashboardData();
+                await fetch('/api/guardar-cliente', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+                    telefono: document.getElementById('addTel').value, nombre: document.getElementById('addNom').value,
+                    plataforma: document.getElementById('addPlat').value, fecha_vencimiento: document.getElementById('addVenc').value,
+                    correo: document.getElementById('addMail').value, clave: document.getElementById('addPass').value,
+                    perfil: document.getElementById('addPerfil').value, pin: document.getElementById('addPin').value, chances: document.getElementById('addChances').value
+                })});
+                alert('✅ Cliente registrado'); document.getElementById('formAddClient').reset(); loadDashboardData();
             });
 
             document.getElementById('formCargarStock').addEventListener('submit', async (e) => {
                 e.preventDefault();
-                const body = {
-                    plataforma: document.getElementById('stkPlataforma').value,
-                    correo: document.getElementById('stkCorreo').value,
-                    clave: document.getElementById('stkPass').value,
-                    perfil: document.getElementById('stkPerfil').value,
-                    pin: document.getElementById('stkPin').value
-                };
-                await fetch('/api/agregar-stock', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-                alert('✅ Cuenta agregada al Stock');
-                document.getElementById('formCargarStock').reset();
-                loadDashboardData();
+                await fetch('/api/agregar-stock', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+                    plataforma: document.getElementById('stkPlataforma').value, correo: document.getElementById('stkCorreo').value,
+                    clave: document.getElementById('stkPass').value, perfil: document.getElementById('stkPerfil').value, pin: document.getElementById('stkPin').value
+                })});
+                alert('✅ Cuenta agregada'); document.getElementById('formCargarStock').reset(); loadDashboardData();
             });
 
-            async function eliminarCliente(clientId) {
-                if (confirm('¿Seguro que deseas eliminar este cliente?')) {
-                    await fetch('/api/eliminar-cliente', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ clientId }) });
-                    loadDashboardData();
-                }
-            }
-
-            async function togglePausaBot() {
-                await fetch('/api/control-bot', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({accion:'pausa_global', valor: !botPausadoEstado}) });
-                loadDashboardData();
-            }
-
-            async function guardarPromo() {
-                const promo = document.getElementById('txtPromoGlobal').value;
-                await fetch('/api/control-bot', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({accion:'promo', valor: promo}) });
-                alert('✅ Promo activada');
-            }
-
-            async function desactivarPromo() {
-                await fetch('/api/control-bot', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({accion:'promo', valor: ''}) });
-                alert('✅ Promo apagada');
-            }
+            async function eliminarCliente(clientId) { if (confirm('¿Seguro que deseas eliminar este cliente?')) { await fetch('/api/eliminar-cliente', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ clientId }) }); loadDashboardData(); } }
+            async function togglePausaBot() { await fetch('/api/control-bot', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({accion:'pausa_global', valor: !botPausadoEstado}) }); loadDashboardData(); }
+            async function guardarPromo() { await fetch('/api/control-bot', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({accion:'promo', valor: document.getElementById('txtPromoGlobal').value}) }); alert('✅ Promo activada'); }
+            async function desactivarPromo() { await fetch('/api/control-bot', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({accion:'promo', valor: ''}) }); alert('✅ Promo apagada'); }
 
             checkAuth();
         </script>
@@ -1388,29 +953,14 @@ app.get('/', (req, res) => {
 // RUTAS DE WHATSAPP (WEBHOOK META)
 // ==========================================
 app.get('/webhook', (req, res) => {
-    if (req.query['hub.mode'] === 'subscribe' && req.query['hub.verify_token'] === VERIFY_TOKEN) {
-        res.status(200).send(req.query['hub.challenge']);
-    } else {
-        res.sendStatus(403);
-    }
+    if (req.query['hub.mode'] === 'subscribe' && req.query['hub.verify_token'] === VERIFY_TOKEN) { res.status(200).send(req.query['hub.challenge']); } 
+    else { res.sendStatus(403); }
 });
 
 app.post('/api/asignar-cuenta', async (req, res) => {
     const { cuenta_id, cliente_id } = req.body;
-    try {
-        const { data, error } = await supabase
-            .from('CUENTAS')
-            .update({ 
-                cliente_id: cliente_id, 
-                estado: 'Ocupado' 
-            })
-            .eq('id', cuenta_id);
-
-        if (error) throw error;
-        res.json({ success: true });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
+    await supabase.from('CUENTAS').update({ cliente_id: cliente_id, estado: 'Ocupado' }).eq('id', cuenta_id);
+    res.json({ success: true });
 });
 
 app.post('/webhook', async (req, res) => {
@@ -1419,7 +969,6 @@ app.post('/webhook', async (req, res) => {
     try {
         const body = req.body;
         if (!body.object) return;
-
         const message = body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
         if (!message) return;
 
@@ -1428,128 +977,12 @@ app.post('/webhook', async (req, res) => {
         const type = message.type;
         const isOwner = checkIsOwner(from);
 
-        const textMessage = type === 'text' ? message.text.body : '';
+        let textMessage = '';
 
-        if (isOwner && type === 'text') {
-            const rawMsg = textMessage.trim();
-            const lowerCmd = rawMsg.toLowerCase();
-
-            if (lowerCmd === '!ayuda' || lowerCmd === '!comandos') {
-                const ayuda = `🛠️ *Panel Admin NEXXUS:*\n\n` +
-                    `🔹 *!dar [teléfono] [datos o plataforma]*: Envía acceso al cliente.\n` +
-                    `🔹 *!agregar [tel] | [nombre] | [servicio] | [aaaa-mm-dd]*: Registra servicio.\n` +
-                    `🔹 *!historial [tel]*: Muestra últimos mensajes.\n` +
-                    `🔹 *!resp [tel] [mensaje]*: Responde directo al cliente.\n` +
-                    `🔹 *PAUSA [tel]* / *ACTIVAR [tel]*: Controla el bot.\n` +
-                    `🔹 *PAUSA TODOS* / *ACTIVAR TODOS*: Pausa global.\n` +
-                    `🔹 *PROMO ACTIVA [texto]* / *PROMO OFF*: Promociones.`;
-                await sendWhatsAppMessage(from, ayuda);
-                return;
-            }
-
-            if (lowerCmd.startsWith('!dar')) {
-                const firstLine = rawMsg.split('\n')[0];
-                const parts = firstLine.split(' ');
-                const targetPhone = parts[1] ? cleanNumber(parts[1]) : null;
-
-                if (!targetPhone) {
-                    await sendWhatsAppMessage(from, "❌ Falta el número de teléfono. Uso: !dar [número] [detalles]");
-                    return;
-                }
-
-                const restOfMessage = rawMsg.substring(rawMsg.indexOf(parts[1]) + parts[1].length).trim();
-
-                if (restOfMessage.includes('\n') || restOfMessage.toLowerCase().includes('correo') || restOfMessage.toLowerCase().includes('contraseña') || restOfMessage.toLowerCase().includes('clave')) {
-                    const mensajeEnviar = `🎉 *¡Tus datos de acceso de NEXXUS!* 🎉\n\n${restOfMessage}\n\n⚠️ *Importante:* No modifiques los datos de las cuentas para evitar bloqueos. ¡Gracias por elegirnos! - NEXXUS`;
-                    await sendWhatsAppMessage(targetPhone, mensajeEnviar);
-                    await sendWhatsAppMessage(from, `✅ Acceso enviado con éxito al cliente +${targetPhone}`);
-                    return;
-                } else {
-                    const plataformaBuscada = restOfMessage || 'General';
-                    const { data: cuentaData } = await supabase
-                        .from('CUENTAS')
-                        .select('*')
-                        .ilike('plataforma', `%${plataformaBuscada}%`)
-                        .eq('estado', 'disponible')
-                        .limit(1)
-                        .maybeSingle();
-
-                    if (!cuentaData) {
-                        await sendWhatsAppMessage(from, `❌ No hay stock disponible de ${plataformaBuscada} en Supabase.`);
-                        return;
-                    }
-
-                    let msgCliente = `🎉 *¡Tus datos de acceso de NEXXUS!* 🎉\n\n📺 *Plataforma:* ${cuentaData.plataforma}\n📧 *Correo:* ${cuentaData.correo}\n🔑 *Contraseña:* ${cuentaData.clave}`;
-                    if (cuentaData.perfil) msgCliente += `\n👤 *Perfil:* ${cuentaData.perfil}`;
-                    if (cuentaData.pin) msgCliente += `\n🔢 *PIN:* ${cuentaData.pin}`;
-                    msgCliente += `\n\n⚠️ *Importante:* No modifiques los datos. ¡Gracias por elegirnos! - NEXXUS`;
-
-                    const { data: clientObj } = await supabase.from('CLIENTES').select('id, chances').eq('telefono', targetPhone).maybeSingle();
-                    if (clientObj) {
-                        await supabase.from('CUENTAS').update({ estado: 'ocupado', cliente_id: clientObj.id }).eq('id', cuentaData.id);
-                        await supabase.from('CLIENTES').update({ chances: (clientObj.chances || 0) + 1 }).eq('id', clientObj.id);
-                    }
-                    await sendWhatsAppMessage(targetPhone, msgCliente);
-                    await sendWhatsAppMessage(from, `✅ Cuenta de ${cuentaData.plataforma} entregada desde Supabase a +${targetPhone}`);
-                    return;
-                }
-            }
-
-            if (lowerCmd.startsWith('!agregar ')) {
-                const partes = rawMsg.replace('!agregar', '').trim().split('|');
-                if (partes.length >= 4) {
-                    const tel = cleanNumber(partes[0]);
-                    const nom = partes[1].trim();
-                    const serv = partes[2].trim();
-                    const fec = partes[3].trim();
-
-                    const { data: existingCli } = await supabase.from('CLIENTES').select('id, chances').eq('telefono', tel).maybeSingle();
-                    let clientId = existingCli?.id;
-
-                    if (clientId) {
-                        await supabase.from('CLIENTES').update({ nombre: nom, chances: (existingCli.chances || 0) + 1 }).eq('id', clientId);
-                    } else {
-                        const { data: newCli } = await supabase.from('CLIENTES').insert([{ telefono: tel, nombre: nom, chances: 1 }]).select().single();
-                        clientId = newCli?.id;
-                    }
-
-                    if (clientId) {
-                        await supabase.from('CUENTAS').insert([{ cliente_id: clientId, plataforma: serv, fecha_vencimiento: fec, estado: 'ocupado' }]);
-                        await supabase.from('SERVICIOS').insert([{ cliente_id: clientId, servicio_id: serv, fecha_vencimiento: fec, estado: 'ACTIVO' }]);
-                    }
-                    await sendWhatsAppMessage(from, `✅ Cliente cargado en Supabase:\n👤 ${nom}\n📱 +${tel}\n📦 ${serv}\n📅 Vence: ${fec}`);
-                }
-                return;
-            }
-
-            if (lowerCmd.startsWith('!historial ')) {
-                const num = cleanNumber(rawMsg.split(' ')[1]);
-                const { data: logs } = await supabase.from('messages').select('*').eq('phone', num).order('created_at', { ascending: false }).limit(10);
-                const txt = logs?.length ? `📜 *Historial +${num}:*\n` + logs.reverse().map(m => `• *${m.role}:* ${m.content}`).join('\n') : `Sin datos para +${num}`;
-                await sendWhatsAppMessage(from, txt);
-                return;
-            }
-
-            if (lowerCmd.startsWith('!resp ')) {
-                const parts = rawMsg.split(' ');
-                const targetPhone = cleanNumber(parts[1]);
-                const textToSend = parts.slice(2).join(' ');
-                await sendWhatsAppMessage(targetPhone, textToSend);
-                await sendWhatsAppMessage(from, `✅ Mensaje enviado a +${targetPhone}`);
-                return;
-            }
-
-            if (rawMsg === 'PAUSA TODOS') { pausedChats['TODOS'] = true; await sendWhatsAppMessage(from, 'Bot pausado para TODOS.'); return; }
-            if (rawMsg === 'ACTIVAR TODOS') { pausedChats['TODOS'] = false; await sendWhatsAppMessage(from, 'Bot reactivado para TODOS.'); return; }
-            if (rawMsg.startsWith('PAUSA ')) { const p = cleanNumber(rawMsg.split(' ')[1]); pausedChats[p] = true; await sendWhatsAppMessage(from, `Pausado para +${p}`); return; }
-            if (rawMsg.startsWith('ACTIVAR ')) { const p = cleanNumber(rawMsg.split(' ')[1]); pausedChats[p] = false; await sendWhatsAppMessage(from, `Activado para +${p}`); return; }
-            if (rawMsg.startsWith('PROMO ACTIVA ')) { promoActiva = rawMsg.replace('PROMO ACTIVA ', ''); await sendWhatsAppMessage(from, 'Promo global activada.'); return; }
-            if (rawMsg === 'PROMO OFF') { promoActiva = null; await sendWhatsAppMessage(from, 'Promo global desactivada.'); return; }
-        }
-
-        if (pausedChats['TODOS'] || pausedChats[from]) return;
-
-        if (type === 'image') {
+        if (type === 'text') {
+            textMessage = message.text.body;
+        } 
+        else if (type === 'image') {
             const mediaId = message.image.id;
             const caption = message.image.caption || '';
             const ownerClean = cleanNumber(OWNER_PHONE);
@@ -1557,83 +990,109 @@ app.post('/webhook', async (req, res) => {
             if (ownerClean) {
                 await axios.post(
                     `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
-                    { messaging_product: 'whatsapp', to: ownerClean, type: 'image', image: { id: mediaId, caption: `📷 *Comprobante/Imagen recibida*\n👤 *Cliente:* ${pushName}\n📞 *Teléfono:* +${from}\n💬 *Nota:* ${caption}` } },
-                    { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, 'Content-Type': 'application/json' } }
+                    { messaging_product: 'whatsapp', to: ownerClean, type: 'image', image: { id: mediaId, caption: `📷 *Comprobante de Pago*\n👤 *De:* ${pushName}\n📞 *Tel:* +${from}\n💬 *Nota:* ${caption}` } },
+                    { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
                 );
             }
             
-            await supabase.from('messages').insert([{ phone: from, role: 'user', content: '[Envío de Imagen/Comprobante]' }]);
-            await sendWhatsAppMessage(from, "📲 Recibí tu imagen correctamente. Ryan la está revisando ahora mismo. \n\nSi es por un problema técnico y aún no me pasaste los datos, ¿me confirmás tu correo, clave y el perfil con el que tenés el inconveniente para agilizar la solución?");
+            textMessage = `[El cliente acaba de enviar una IMAGEN/COMPROBANTE DE PAGO. Si no ha especificado qué servicio quiere, pregúntaselo ahora. Si ya sabes qué servicio quiere, USA LA HERRAMIENTA 'dar_cuenta' INMEDIATAMENTE para entregarle el acceso sin esperar a Ryan.]`;
+        } 
+        else {
             return;
         }
 
-        if (type === 'audio') {
-            await sendWhatsAppMessage(from, "Hola! Por ahora solo puedo procesar mensajes de texto. ¿Podrías escribirme tu consulta? 😊");
-            return;
-        }
+        if (isOwner && type === 'text') {
+            const rawMsg = textMessage.trim();
+            const lowerCmd = rawMsg.toLowerCase();
 
-        if (type === 'text') {
-            const lowerUserText = textMessage.toLowerCase();
-
-            const promoKeywords = ['promo', 'promocion', 'promoción', 'descuento', 'oferta'];
-            if (promoKeywords.some(k => lowerUserText.includes(k)) && !promoActiva) {
-                await notifyOwner(from, `CONSULTA DE PROMO: El cliente +${from} está preguntando por promociones.`);
-            }
-
-            const palabrasCriticas = ['codigo', 'código', 'hogar', 'viaje', 'comprobante', 'pago', 'error', 'asesor', 'humano', 'no me deja'];
-            if (palabrasCriticas.some(p => lowerUserText.includes(p))) {
-                await notifyOwner(from, `Mensaje crítico: "${textMessage}"`);
-            }
-
-            await supabase.from('messages').insert([{ phone: from, role: 'user', content: textMessage }]);
-
-            const { data: clienteList } = await supabase.from('CLIENTES').select('*, CUENTAS(*), SERVICIOS(*)');
-            const cleanFrom = cleanNumber(from);
-            const cliente = clienteList?.find(c => cleanNumber(c.telefono).endsWith(cleanFrom.slice(-8)) || cleanFrom.endsWith(cleanNumber(c.telefono).slice(-8)));
-            
-            let contextoBD = '';
-            if (cliente) {
-                contextoBD = `\n\n[INFO INTERNA - YA ES CLIENTE]: Se llama ${cliente.nombre}. `;
-                const cuentaObj = cliente.CUENTAS?.[0] || cliente.SERVICIOS?.[0];
-                if (cuentaObj) {
-                    const fechaVenc = cuentaObj.fecha_vencimiento;
-                    const plat = cuentaObj.plataforma || cuentaObj.servicio_id;
-                    if (fechaVenc) {
-                        const faltanDias = Math.ceil((new Date(fechaVenc) - new Date()) / (1000 * 60 * 60 * 24));
-                        contextoBD += `Tiene ${plat}. Vence el ${fechaVenc} (Faltan ${faltanDias} días). `;
-                        if (faltanDias <= 5 && faltanDias >= 0) {
-                            contextoBD += `[INSTRUCCIÓN OBLIGATORIA: Como el servicio vence en ${faltanDias} días, recuérdale con mucha amabilidad antes de despedirte que puede ir renovando al alias RYAN.MB para evitar cortes de servicio].`;
-                        }
+            if (lowerCmd.startsWith('!agregar ')) {
+                const partes = rawMsg.replace('!agregar', '').trim().split('|');
+                if (partes.length >= 4) {
+                    const tel = cleanNumber(partes[0]);
+                    const { data: existingCli } = await supabase.from('CLIENTES').select('id').eq('telefono', tel).maybeSingle();
+                    let clientId = existingCli?.id;
+                    if (!clientId) {
+                        const { data: newCli } = await supabase.from('CLIENTES').insert([{ telefono: tel, nombre: partes[1].trim(), chances: 1 }]).select().single();
+                        clientId = newCli?.id;
                     }
+                    if (clientId) {
+                        await supabase.from('CUENTAS').insert([{ cliente_id: clientId, plataforma: partes[2].trim(), fecha_vencimiento: partes[3].trim(), estado: 'ocupado' }]);
+                    }
+                    await sendWhatsAppMessage(from, `✅ Cliente cargado.`);
                 }
-            } else {
-                contextoBD = `\n\n[INFO INTERNA]: Este usuario NO ESTÁ en la base de datos. Trátalo como CLIENTE NUEVO. Ofrécele catálogo, no pidas datos de acceso porque no tiene.`;
+                return;
             }
+            if (rawMsg === 'PAUSA TODOS') { pausedChats['TODOS'] = true; await sendWhatsAppMessage(from, 'Bot pausado.'); return; }
+            if (rawMsg === 'ACTIVAR TODOS') { pausedChats['TODOS'] = false; await sendWhatsAppMessage(from, 'Bot reactivado.'); return; }
+        }
 
-            const promoContext = promoActiva 
-                ? `\n\n[PROMO ACTIVA AHORA]: "${promoActiva}". Menciónala.` 
-                : `\n\n[PROMO ACTIVA]: NO hay promociones activas en este momento. Si el cliente pregunta por promos, dile amablemente que no hay promos vigentes pero que los precios son súper accesibles. NO vuelvas a enviarle el catálogo completo si ya se lo diste.`;
+        if (pausedChats['TODOS'] || pausedChats[from]) return;
 
-            const { data: history } = await supabase.from('messages').select('*').eq('phone', from).order('created_at', { ascending: false }).limit(8);
-            const messagesFormatted = (history || []).reverse().map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content }));
-            
-            messagesFormatted.push({ role: 'user', content: textMessage });
+        await supabase.from('messages').insert([{ phone: from, role: 'user', content: textMessage }]);
 
-            const response = await client.messages.create({
-                model: 'claude-sonnet-4-6',
-                max_tokens: 500,
-                system: SYSTEM_PROMPT + contextoBD + promoContext,
-                messages: messagesFormatted
-            });
+        const { data: clienteList } = await supabase.from('CLIENTES').select('*, CUENTAS(*), SERVICIOS(*)');
+        const cleanFrom = cleanNumber(from);
+        const cliente = clienteList?.find(c => cleanNumber(c.telefono).endsWith(cleanFrom.slice(-8)));
+        
+        let contextoBD = cliente 
+            ? `\n\n[INFO INTERNA]: Cliente registrado: ${cliente.nombre}.` 
+            : `\n\n[INFO INTERNA]: Cliente NUEVO.`;
 
-            const botReply = response.content[0].text;
-            
+        const { data: cuentasStock } = await supabase.from('CUENTAS').select('*');
+        const { data: history } = await supabase.from('messages').select('*').eq('phone', from).order('created_at', { ascending: false }).limit(6);
+        const messagesFormatted = (history || []).reverse().map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content }));
+        messagesFormatted.push({ role: 'user', content: textMessage });
+
+        const tools = [
+            { name: "dar_cuenta", description: "Busca stock y entrega credenciales.", input_schema: { type: "object", properties: { plataforma: { type: "string" }, telefono_cliente: { type: "string" } }, required: ["plataforma", "telefono_cliente"] } }
+        ];
+
+        let response = await client.messages.create({
+            model: 'claude-sonnet-4-6', max_tokens: 500, tools: tools,
+            system: SYSTEM_PROMPT + contextoBD,
+            messages: messagesFormatted
+        });
+
+        let botReply = "";
+
+        if (response.stop_reason === "tool_use") {
+            const toolUseBlock = response.content.find(block => block.type === "tool_use");
+            if (toolUseBlock && toolUseBlock.name === "dar_cuenta") {
+                const { plataforma, telefono_cliente } = toolUseBlock.input;
+                const stockDisp = cuentasStock?.filter(s => String(s.estado || '').toLowerCase().trim() === 'disponible') || [];
+                
+                const platBuscada = plataforma.toLowerCase().trim().split(' ')[0];
+                const cuentaLibre = stockDisp.find(s => String(s.plataforma).toLowerCase().includes(platBuscada));
+
+                let toolResultContent = "";
+                if (cuentaLibre) {
+                    await supabase.from('CUENTAS').update({ estado: 'ocupado', telefono: telefono_cliente }).eq('id', cuentaLibre.id);
+                    notifyOwner(telefono_cliente, `🎉 ¡VENTA AUTOMÁTICA REALIZADA!\nALICE acaba de entregar una cuenta de ${cuentaLibre.plataforma} a +${telefono_cliente}.\nVerificá el comprobante cuando puedas.`);
+                    toolResultContent = `Cuenta encontrada y asignada en la base de datos. DEBES ENVIAR ESTOS DATOS EXACTOS AL CLIENTE: Plataforma: ${cuentaLibre.plataforma} | Correo: ${cuentaLibre.correo} | Clave: ${cuentaLibre.clave || '-'} | Perfil: ${cuentaLibre.perfil || '-'} | PIN: ${cuentaLibre.pin || '-'}`;
+                } else {
+                    toolResultContent = `No hay stock disponible de ${plataforma}. Avísale al cliente.`;
+                }
+
+                messagesFormatted.push({ role: 'assistant', content: response.content });
+                messagesFormatted.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUseBlock.id, content: toolResultContent }] });
+
+                const finalResponse = await client.messages.create({
+                    model: 'claude-sonnet-4-6', max_tokens: 400, tools: tools,
+                    system: SYSTEM_PROMPT, messages: messagesFormatted
+                });
+                botReply = finalResponse.content.find(block => block.type === 'text')?.text || 'Procesado.';
+            }
+        } else {
+            botReply = response.content.find(block => block.type === 'text')?.text;
+        }
+
+        if (botReply) {
             await supabase.from('messages').insert([{ phone: from, role: 'assistant', content: botReply }]);
             await sendWhatsAppMessage(from, botReply);
         }
 
     } catch (e) {
-        console.error('Error en Webhook:', e.message);
+        console.error('Error Webhook:', e.message);
     }
 });
 
