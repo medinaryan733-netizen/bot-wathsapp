@@ -912,7 +912,7 @@ app.get('/', (req, res) => {
                         : 'Sin datos';
                     
                     tbody.innerHTML += "<tr>" +
-                        "<td><strong>" + c.nombre + "</strong></td>" +
+                       "<td><strong>#" + c.id + " - " + c.nombre + "</strong></td>" +
                         "<td>+" + c.telefono + "</td>" +
                         "<td>" + (cuenta.plataforma || 'Sin servicio') + "</td>" +
                         "<td><small>" + mailPass + "</small></td>" +
