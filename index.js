@@ -356,6 +356,8 @@ app.post('/api/chat-bot', async (req, res) => {
 // ==========================================
 app.delete('/api/clientes/:id', async (req, res) => { await supabase.from('CLIENTES').delete().eq('id', req.params.id); res.json({ success: true }); });
 app.delete('/api/cuentas/:id', async (req, res) => { await supabase.from('CUENTAS').delete().eq('id', req.params.id); res.json({ success: true }); });
+
+// NUEVO: LA RUTA AHORA ACTUALIZA TODOS LOS CAMPOS DE LA CUENTA
 app.put('/api/cuentas/:id', async (req, res) => {
     try {
         const { plataforma, correo, clave, pin, perfil, estado, telefono } = req.body;
@@ -375,6 +377,7 @@ app.put('/api/cuentas/:id', async (req, res) => {
         res.status(500).json({ success: false, error: e.message });
     }
 });
+
 app.get('/api/clientes', async (req, res) => { res.json(await fetchFullClientes()); });
 app.post('/api/agregar-stock', async (req, res) => {
     const { plataforma, correo, clave, password, perfil, pin } = req.body;
@@ -478,7 +481,6 @@ app.get('/', (req, res) => {
                 <button class="tab-btn" onclick="switchTab('tabAgregar')">5. ➕ Agregar Cliente</button>
             </div>
 
-            <!-- TAB 1: RESUMEN -->
             <div id="tabResumen" class="tab-content active">
                 <div class="metrics-grid">
                     <div class="metric-card"><h3 id="mClientes">0</h3><p>Clientes Totales</p></div>
@@ -488,7 +490,6 @@ app.get('/', (req, res) => {
                 </div>
             </div>
 
-            <!-- TAB 2: CLIENTES -->
             <div id="tabClientes" class="tab-content">
                 <input type="text" id="searchClient" placeholder="🔎 Buscar por nombre, teléfono o servicio..." onkeyup="filterClientes()">
                 <table>
@@ -507,7 +508,6 @@ app.get('/', (req, res) => {
                 </table>
             </div>
 
-            <!-- TAB 3: STOCK -->
             <div id="tabStock" class="tab-content">
                 <h3>Cargar Nueva Cuenta al Stock Disponible</h3>
                 <form id="formCargarStock" style="margin-bottom:25px;">
@@ -523,7 +523,6 @@ app.get('/', (req, res) => {
                 <div id="contenedorStockPorServicio"></div>
             </div>
 
-            <!-- TAB 4: BOT -->
             <div id="tabBot" class="tab-content">
                 <h3>💬 Hablar Directamente con ALICE</h3>
                 <div class="chat-container">
@@ -550,7 +549,6 @@ app.get('/', (req, res) => {
                 <button onclick="desactivarPromo()" style="max-width:250px; background:#ef4444; color:#fff; border:none; padding:12px; border-radius:6px; cursor:pointer;">Apagar Promo</button>
             </div>
 
-            <!-- TAB 5: AGREGAR -->
             <div id="tabAgregar" class="tab-content">
                 <h3>Agregar / Registrar Nuevo Cliente</h3>
                 <form id="formAddClient">
@@ -593,7 +591,7 @@ app.get('/', (req, res) => {
                 <label style="font-size:0.8rem; color:var(--muted);">Fecha de Vencimiento:</label>
                 <input type="date" id="editVenc">
                 <button id="btnSaveEdit" onclick="saveEditClienteCompleto()" class="btn-primary">Guardar Cambios</button>
-                <button onclick="closeEditModal()" style="background:#ef4444; color:#fff; border:none; padding:12px; width:100%; border-radius:6px; cursor:pointer; margin-top:5px;">Cancelar</button>
+                <button onclick="document.getElementById('editModal').style.display='none';" style="background:#ef4444; color:#fff; border:none; padding:12px; width:100%; border-radius:6px; cursor:pointer; margin-top:5px;">Cancelar</button>
             </div>
         </div>
 
@@ -605,7 +603,7 @@ app.get('/', (req, res) => {
                 <input type="hidden" id="msgTelTarget">
                 <textarea id="txtMsgContent" rows="4" placeholder="Escribí tu mensaje acá..." style="resize:vertical;"></textarea>
                 <button onclick="sendDirectWhatsApp()" class="btn-primary">Enviar por WhatsApp</button>
-                <button onclick="closeMsgModal()" style="background:#ef4444; color:#fff; border:none; padding:12px; width:100%; border-radius:6px; cursor:pointer; margin-top:5px;">Cancelar</button>
+                <button onclick="document.getElementById('msgModal').style.display='none';" style="background:#ef4444; color:#fff; border:none; padding:12px; width:100%; border-radius:6px; cursor:pointer; margin-top:5px;">Cancelar</button>
             </div>
         </div>
 
@@ -660,7 +658,6 @@ app.get('/', (req, res) => {
                 } catch(e) { console.error("Error cargando dashboard:", e); }
             }
 
-            // AQUI SE AGREGA EL ID AL LADO DEL NOMBRE PARA SABER QUIÉN ES QUIÉN
             function renderClientesTable(lista) {
                 const tbody = document.getElementById('tblClientes');
                 tbody.innerHTML = '';
@@ -686,7 +683,6 @@ app.get('/', (req, res) => {
                 });
             }
 
-            // RESTAURAMOS EL DISEÑO HERMOSO (BARRAS VERDES Y ROJAS ACORDEON)
             function renderStockPorServicios(lista) {
                 const contenedor = document.getElementById('contenedorStockPorServicio');
                 contenedor.innerHTML = '';
@@ -732,25 +728,26 @@ app.get('/', (req, res) => {
                         listaCuentas.forEach(s => {
                             const asig = s.cliente_id ? '<span style="color:#3b82f6; font-weight:bold;">#' + s.cliente_id + '</span>' : '-';
                             const id = s.id || '';
-                            const safePlat = (s.plataforma || '').replace(/'/g, "\\'");
-                            const safeCorr = (s.correo || '').replace(/'/g, "\\'");
-                            const safeClave = (s.clave || '').replace(/'/g, "\\'");
-                            const safePin = (s.pin || '').replace(/'/g, "\\'");
-                            const safePerf = (s.perfil || '').replace(/'/g, "\\'");
+                            const safePlat = (s.plataforma || '').replace(/["']/g, '');
+                            const safeCorr = (s.correo || '').replace(/["']/g, '');
+                            const safeClave = (s.clave || '').replace(/["']/g, '');
+                            const safePin = (s.pin || '').replace(/["']/g, '');
+                            const safePerf = (s.perfil || '').replace(/["']/g, '');
                             
-                            html += '<tr style="border-top: 1px solid #334155;">' +
-                                        '<td style="padding: 8px 15px;"><strong>P: ' + safePerf + '</strong></td>' +
-                                        '<td style="padding: 8px 15px;"><strong>' + safePin + '</strong></td>';
+                            html += "<tr style='border-top: 1px solid #334155;'>" +
+                                        "<td style='padding: 8px 15px;'><strong>P: " + safePerf + "</strong></td>" +
+                                        "<td style='padding: 8px 15px;'><strong>" + safePin + "</strong></td>";
                             
-                            if (tipo === 'ocupada') { html += '<td style="padding: 8px 15px;">' + asig + '</td>'; }
-                            html += '<td style="padding: 8px 15px; text-align: right;">';
+                            if (tipo === 'ocupada') { html += "<td style='padding: 8px 15px;'>" + asig + "</td>"; }
+                            html += "<td style='padding: 8px 15px; text-align: right;'>";
                             
-                            if (tipo === 'libre') { html += '<button style="padding:5px 10px; font-size:0.8rem; margin-right:5px; background:#3b82f6; border:none; border-radius:4px; color:white; cursor:pointer;" onclick="abrirModalAsignar(\'' + id + '\')">👤 Asignar</button>'; }
+                            if (tipo === 'libre') { 
+                                html += "<button style='padding:5px 10px; font-size:0.8rem; margin-right:5px; background:#3b82f6; border:none; border-radius:4px; color:white; cursor:pointer;' onclick='abrirModalAsignar(\\"" + id + "\\")'>👤 Asignar</button>"; 
+                            }
                             
-                            // NUEVO: EL BOTON EDITAR AHORA PASA TODOS LOS PARAMETROS (INCLUIDA PLATAFORMA Y CORREO)
-                            html += '<button class="btn-edit" style="padding:5px 10px; font-size:0.8rem; margin-right:5px;" onclick="editarStockRapido(\'' + id + '\', \'' + safePlat + '\', \'' + safeCorr + '\', \'' + safeClave + '\', \'' + safePin + '\', \'' + safePerf + '\')">✏️ Editar</button>' +
-                                    '<button class="btn-danger" style="padding:5px 10px; font-size:0.8rem;" onclick="eliminarStockRapido(\'' + id + '\')">🗑️</button>' +
-                                        '</td></tr>';
+                            html += "<button class='btn-edit' style='padding:5px 10px; font-size:0.8rem; margin-right:5px;' onclick='editarStockRapido(\\"" + id + "\\", \\"" + safePlat + "\\", \\"" + safeCorr + "\\", \\"" + safeClave + "\\", \\"" + safePin + "\\", \\"" + safePerf + "\\")'>✏️ Editar</button>" +
+                                    "<button class='btn-danger' style='padding:5px 10px; font-size:0.8rem;' onclick='eliminarStockRapido(\\"" + id + "\\")'>🗑️</button>" +
+                                        "</td></tr>";
                         });
                         html += '</tbody></table></div></div>';
                     }
@@ -794,13 +791,13 @@ app.get('/', (req, res) => {
                     modal.id = 'modalAsignar';
                     modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); display:flex; justify-content:center; align-items:center; z-index:9999;';
                     modal.innerHTML = 
-                        '<div style="background:#1e293b; padding:25px; border-radius:10px; border:1px solid #3b82f6; width:90%; max-width:400px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">' +
-                            '<h3 style="color:white; margin-top:0; border-bottom:1px solid #334155; padding-bottom:10px;">👤 Asignar Cuenta</h3>' +
-                            '<select id="selectClienteModal" style="width:100%; padding:10px; margin-bottom:20px; border-radius:5px; background:#0f172a; color:white; border:1px solid #475569; outline:none;">' + opciones + '</select>' +
-                            '<div style="display:flex; justify-content:flex-end; gap:10px;">' +
-                                '<button onclick="document.getElementById(\'modalAsignar\').remove()" style="background:#475569; padding:8px 15px; border:none; border-radius:5px; color:white; cursor:pointer;">Cancelar</button>' +
-                                '<button onclick="confirmarAsignacion(\'' + idCuenta + '\')" style="background:#10b981; padding:8px 15px; border:none; border-radius:5px; color:white; cursor:pointer; font-weight:bold;">✅ Confirmar</button>' +
-                            '</div></div>';
+                        "<div style='background:#1e293b; padding:25px; border-radius:10px; border:1px solid #3b82f6; width:90%; max-width:400px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);'>" +
+                            "<h3 style='color:white; margin-top:0; border-bottom:1px solid #334155; padding-bottom:10px;'>👤 Asignar Cuenta</h3>" +
+                            "<select id='selectClienteModal' style='width:100%; padding:10px; margin-bottom:20px; border-radius:5px; background:#0f172a; color:white; border:1px solid #475569; outline:none;'>" + opciones + "</select>" +
+                            "<div style='display:flex; justify-content:flex-end; gap:10px;'>" +
+                                "<button onclick='document.getElementById(\\"modalAsignar\\").remove()' style='background:#475569; padding:8px 15px; border:none; border-radius:5px; color:white; cursor:pointer;'>Cancelar</button>" +
+                                "<button onclick='confirmarAsignacion(\"" + idCuenta + "\")' style='background:#10b981; padding:8px 15px; border:none; border-radius:5px; color:white; cursor:pointer; font-weight:bold;'>✅ Confirmar</button>" +
+                            "</div></div>";
                     document.body.appendChild(modal);
                 } catch (e) { alert('Error al cargar clientes.'); }
             }
@@ -825,7 +822,6 @@ app.get('/', (req, res) => {
                 }
             }
 
-            // NUEVO: ESTE BOTON AHORA TE DEJA ARREGLAR LAS PLATAFORMAS Y LOS CORREOS SUELTOS
             async function editarStockRapido(id, pPlat, pCorr, pClave, pPin, pPerf) {
                 const nPlat = prompt("Plataforma oficial (Ej: Disney+, Netflix, etc):", pPlat); if (nPlat === null) return; 
                 const nCorr = prompt("Correo de la cuenta:", pCorr); if (nCorr === null) return;
@@ -863,8 +859,6 @@ app.get('/', (req, res) => {
                 document.getElementById('editModal').style.display = 'flex';
             }
 
-            function closeEditModal() { document.getElementById('editModal').style.display = 'none'; }
-
             async function saveEditClienteCompleto() {
                 const btn = document.getElementById('btnSaveEdit'); btn.disabled = true; btn.textContent = 'Guardando...';
                 try {
@@ -878,7 +872,7 @@ app.get('/', (req, res) => {
                             chances: document.getElementById('editChances').value, fecha_vencimiento: document.getElementById('editVenc').value
                         })
                     });
-                    if (res.ok) { closeEditModal(); alert('✅ Guardado'); await loadDashboardData(); }
+                    if (res.ok) { document.getElementById('editModal').style.display='none'; alert('✅ Guardado'); await loadDashboardData(); }
                 } catch(e) { alert('❌ Error'); } finally { btn.disabled = false; btn.textContent = 'Guardar Cambios'; }
             }
 
@@ -890,15 +884,13 @@ app.get('/', (req, res) => {
                 document.getElementById('msgModal').style.display = 'flex';
             }
 
-            function closeMsgModal() { document.getElementById('msgModal').style.display = 'none'; }
-
             async function sendDirectWhatsApp() {
                 const tel = document.getElementById('msgTelTarget').value;
                 const mensaje = document.getElementById('txtMsgContent').value;
                 if (!mensaje.trim()) return alert('Escribe un mensaje');
                 try {
                     const res = await fetch('/api/enviar-mensaje-cliente', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ telefono: tel, mensaje }) });
-                    if (res.ok) { alert('✅ Mensaje enviado'); closeMsgModal(); }
+                    if (res.ok) { alert('✅ Mensaje enviado'); document.getElementById('msgModal').style.display='none'; }
                 } catch(e) { alert('❌ Error'); }
             }
 
